@@ -921,6 +921,15 @@ struct MaintenanceResponse: Codable {
     let error: String?
 }
 
+extension Array where Element == ChainNode {
+    /// Recursively flattens all nodes and their children into a single array.
+    func flattenedAll() -> [ChainNode] {
+        flatMap { node -> [ChainNode] in
+            [node] + node.childNodes.flattenedAll()
+        }
+    }
+}
+
 extension TimeInterval {
     var asDate: Date { Date(timeIntervalSince1970: self) }
 }

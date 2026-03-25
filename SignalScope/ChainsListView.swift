@@ -93,9 +93,7 @@ struct ChainsListView: View {
                             if !watchedChains.isEmpty {
                                 sectionHeader("Pinned", count: watchedChains.count)
                                 ForEach(watchedChains) { chain in
-                                    NavigationLink {
-                                        ChainDetailView(chainID: chain.id, initialChain: chain)
-                                    } label: {
+                                    NavigationLink(value: chain) {
                                         ChainRowView(chain: chain, isWatched: true)
                                     }
                                     .buttonStyle(.plain)
@@ -107,9 +105,7 @@ struct ChainsListView: View {
                                     sectionHeader(section.0, count: section.1.count)
                                 }
                                 ForEach(section.1) { chain in
-                                    NavigationLink {
-                                        ChainDetailView(chainID: chain.id, initialChain: chain)
-                                    } label: {
+                                    NavigationLink(value: chain) {
                                         ChainRowView(chain: chain, isWatched: appModel.isWatched(chain.id))
                                     }
                                     .buttonStyle(.plain)
@@ -124,6 +120,9 @@ struct ChainsListView: View {
                 }
             }
             .navigationTitle("Chains")
+            .navigationDestination(for: ChainSummary.self) { chain in
+                ChainDetailView(chainID: chain.id, initialChain: chain)
+            }
             .navigationDestination(for: HubStreamRef.self) { ref in
                 SignalHistoryView(streamName: ref.stream.name, siteName: ref.siteName)
             }

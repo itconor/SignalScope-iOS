@@ -42,9 +42,18 @@ final class AppModel: ObservableObject {
     @AppStorage("SignalScope.recentFaults") private var storedRecentFaults: String = "[]"
     @AppStorage("SignalScope.apnsToken") private var storedAPNSToken: String = ""
     @AppStorage("SignalScope.watchlist") private var storedWatchlist: String = "[]"
+    @AppStorage("SignalScope.chainNotifEnabled") var chainNotificationsEnabled: Bool = true
+    @AppStorage("SignalScope.silenceNotifEnabled") var silenceNotificationsEnabled: Bool = false
+    @AppStorage("SignalScope.silenceNodes") private var storedSilenceNodes: String = "[]"
 
     @Published var deepLinkChainID: String?
     @Published var watchlistIDs: Set<String> = []
+    @Published var silenceWatchedNodes: Set<String> = []
+
+    // Cooldown: avoid repeated silence alerts for the same node within 10 min
+    private var silenceAlertCooldown: [String: Date] = [:]
+    private let silenceThresholdDbfs: Double = -45.0
+    private let silenceCooldown: TimeInterval = 10 * 60
 
     @Published var chains: [ChainSummary] = []
     @Published var activeFaults: [ChainSummary] = []
@@ -88,6 +97,7 @@ final class AppModel: ObservableObject {
         acknowledgedFaultIDs = Self.decodeAcknowledgedIDs(from: storedAcknowledgedFaultIDs)
         recentFaults = Self.decodeRecentFaults(from: storedRecentFaults)
         watchlistIDs = Self.decodeWatchlist(from: storedWatchlist)
+        silenceWatchedNodes = Self.decodeStringSet(from: storedSilenceNodes)
         NotificationManager.shared.requestAuthorization()
         startPolling()
         observeNotificationEvents()
@@ -224,6 +234,7 @@ final class AppModel: ObservableObject {
             handleNotifications(old: chains, new: newChains)
             chains = newChains
             activeFaults = fetchedFaults
+            checkSilenceAlerts()
             errorMessage = nil
             isInitialLoad = false
             await refreshReports()
@@ -235,6 +246,7 @@ final class AppModel: ObservableObject {
                 handleNotifications(old: chains, new: newChains)
                 chains = newChains
                 activeFaults = newChains.filter { $0.displayStatus == .fault }
+                checkSilenceAlerts()
                 errorMessage = nil
                 isInitialLoad = false
                 await refreshReports()
@@ -496,7 +508,9 @@ final class AppModel: ObservableObject {
             if let previous = oldMap[item.id] {
                 if previous.displayStatus != .fault && item.displayStatus == .fault {
                     // Newly faulted
-                    NotificationManager.shared.scheduleFaultNotification(chain: item)
+                    if chainNotificationsEnabled {
+                        NotificationManager.shared.scheduleFaultNotification(chain: item)
+                    }
                     captureRecentFault(item)
                     if #available(iOS 16.2, *) {
                         LiveActivityManager.shared.startOrUpdate(for: item)
@@ -509,7 +523,9 @@ final class AppModel: ObservableObject {
                 }
             } else if item.displayStatus == .fault {
                 // New chain we haven't seen before, already faulted
-                NotificationManager.shared.scheduleFaultNotification(chain: item)
+                if chainNotificationsEnabled {
+                    NotificationManager.shared.scheduleFaultNotification(chain: item)
+                }
                 captureRecentFault(item)
                 if #available(iOS 16.2, *) {
                     LiveActivityManager.shared.startOrUpdate(for: item)
@@ -523,6 +539,55 @@ final class AppModel: ObservableObject {
                 LiveActivityManager.shared.end(chainID: chainID, recovered: true)
             }
         }
+    }
+
+    // MARK: - Silence monitoring
+
+    func toggleSilenceNode(_ label: String) {
+        if silenceWatchedNodes.contains(label) {
+            silenceWatchedNodes.remove(label)
+        } else {
+            silenceWatchedNodes.insert(label)
+        }
+        persistSilenceNodes()
+    }
+
+    private func checkSilenceAlerts() {
+        guard silenceNotificationsEnabled, !silenceWatchedNodes.isEmpty else { return }
+        let now = Date()
+        for chain in chains {
+            for node in chain.nodes.flattenedAll() {
+                guard silenceWatchedNodes.contains(node.label) else { continue }
+                guard let level = node.level_dbfs, level < silenceThresholdDbfs else { continue }
+                let key = "\(chain.id)/\(node.label)"
+                if let last = silenceAlertCooldown[key], now.timeIntervalSince(last) < silenceCooldown { continue }
+                silenceAlertCooldown[key] = now
+                NotificationManager.shared.scheduleSilenceNotification(
+                    nodeName: node.label,
+                    chainName: chain.name,
+                    site: node.site ?? chain.dominantSite ?? "",
+                    level: node.level_dbfs
+                )
+            }
+        }
+    }
+
+    private func persistSilenceNodes() {
+        if let data = try? JSONEncoder().encode(Array(silenceWatchedNodes).sorted()),
+           let string = String(data: data, encoding: .utf8) {
+            storedSilenceNodes = string
+        }
+    }
+
+    private static func decodeStringSet(from stored: String) -> Set<String> {
+        guard let data = stored.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return Set(arr)
+    }
+
+    /// All unique node labels across all chains — used by the silence node picker.
+    var allNodeLabels: [String] {
+        Array(Set(chains.flatMap { $0.nodes.flattenedAll().map(\.label) })).sorted()
     }
 
     private func captureRecentFault(_ chain: ChainSummary) {
