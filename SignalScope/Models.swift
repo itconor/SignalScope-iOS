@@ -858,7 +858,7 @@ struct DABService: Codable, Identifiable, Hashable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         channel = try c.decode(String.self, forKey: .channel)
-        if let l = try? c.decodeIfPresent(String.self, forKey: .label), let l, !l.isEmpty {
+        if let l = try? c.decodeIfPresent(String.self, forKey: .label), !l.isEmpty {
             label = l
         } else {
             label = try c.decode(String.self, forKey: .name)
