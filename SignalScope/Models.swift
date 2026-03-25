@@ -865,6 +865,31 @@ struct DABScanStatus: Codable {
     let channel: String?
 }
 
+struct DABRegion: Codable, Identifiable {
+    let id: String
+    let label: String
+    let icon: String
+    let channels: [String]
+    let children: [DABRegion]
+
+    /// Flattened list of self + all descendants (leaf nodes shown first if they have channels)
+    var allDescendants: [DABRegion] {
+        var result: [DABRegion] = []
+        if !children.isEmpty {
+            result.append(self)
+            result.append(contentsOf: children.flatMap { $0.allDescendants })
+        } else {
+            result.append(self)
+        }
+        return result
+    }
+}
+
+struct DABRegionsResponse: Codable {
+    let ok: Bool
+    let regions: DABRegion
+}
+
 // MARK: - Maintenance Response
 
 struct MaintenanceResponse: Codable {

@@ -378,15 +378,24 @@ final class APIClient: ObservableObject {
         return try JSONDecoder().decode(DABServicesResponse.self, from: data)
     }
 
-    func scanDAB(site: String, sdrSerial: String) async throws {
+    func scanDAB(site: String, sdrSerial: String, channels: [String]? = nil) async throws {
         var req = try makeRequest(path: "/api/mobile/dab/scan")
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["site": site, "sdr_serial": sdrSerial])
+        var body: [String: Any] = ["site": site, "sdr_serial": sdrSerial]
+        if let channels { body["channels"] = channels }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (_, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
+    }
+
+    func fetchDABRegions() async throws -> DABRegion {
+        let req = try makeRequest(path: "/api/mobile/dab/regions")
+        let (data, _) = try await URLSession.shared.data(for: req)
+        let response = try JSONDecoder().decode(DABRegionsResponse.self, from: data)
+        return response.regions
     }
 
     func fetchDABScanStatus(site: String) async throws -> DABScanStatus {

@@ -22,6 +22,10 @@ struct DABScannerView: View {
     @State private var statusPollTask: Task<Void, Never>?
     @State private var siteLoadTask: Task<Void, Never>?
 
+    // Region / location presets for faster scanning
+    @State private var regions: [DABRegion] = []          // flat list loaded from hub
+    @State private var selectedRegionID: String = "all"   // "all" = scan every channel
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -64,7 +68,10 @@ struct DABScannerView: View {
                     }
                 }
             }
-            .task { await loadSites() }
+            .task {
+                await loadSites()
+                await loadRegions()
+            }
             .onDisappear { stopStatusPoll() }
         }
     }
@@ -107,9 +114,33 @@ struct DABScannerView: View {
 
     // MARK: - Services Card
 
+    private var selectedRegion: DABRegion? {
+        regions.first { $0.id == selectedRegionID }
+    }
+
     private var servicesCard: some View {
         PanelCard(title: "Services") {
             VStack(alignment: .leading, spacing: 12) {
+
+                // Region picker — only shown once regions are loaded from hub
+                if !regions.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Scan Region")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                        Picker("Region", selection: $selectedRegionID) {
+                            Text("🌍 Full Scan (\(regions.first?.channels.count ?? 0) ch)").tag("all")
+                            ForEach(regions.dropFirst()) { region in  // skip root "All Europe" entry
+                                let chCount = region.channels.count
+                                Text("\(region.icon.isEmpty ? "📡" : region.icon) \(region.label) (\(chCount) ch)")
+                                    .tag(region.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Theme.brandBlue)
+                    }
+                }
+
                 HStack {
                     if !scannedAt.isEmpty {
                         Text("Scanned \(scannedAt)")
@@ -304,13 +335,26 @@ struct DABScannerView: View {
         }
     }
 
+    private func loadRegions() async {
+        guard appModel.api.baseURL != nil else { return }
+        if let rootRegion = try? await appModel.api.fetchDABRegions() {
+            // Flatten to a list: root first, then all descendants
+            regions = rootRegion.allDescendants
+        }
+    }
+
     private func scanAction() async {
         guard !selectedSite.isEmpty else { return }
         isScanning = true
         defer { isScanning = false }
         do {
-            try await appModel.api.scanDAB(site: selectedSite, sdrSerial: selectedSerial)
-            // Poll scan_status until done (a full 38-channel scan takes 5-15 min)
+            // Pass selected region's channels (nil = all channels = full scan)
+            let channels: [String]? = selectedRegionID == "all" ? nil : selectedRegion?.channels
+            let chDesc = channels.map { "\($0.count) ch" } ?? "full scan"
+            try await appModel.api.scanDAB(site: selectedSite, sdrSerial: selectedSerial, channels: channels)
+            statusText = "Scan started (\(chDesc)) — polling for progress…"
+
+            // Poll scan_status until done
             let deadline = Date().addingTimeInterval(20 * 60)  // 20 minute timeout
             var pollCount = 0
             while Date() < deadline {
@@ -324,7 +368,7 @@ struct DABScannerView: View {
                     statusText = status.status == "done"
                         ? "Scan complete — \(status.found ?? 0) service(s) found"
                         : "Scanning\(ch)… \(pct)%"
-                    if status.status == "done" || status.status == "idle" && pollCount > 2 {
+                    if status.status == "done" || (status.status == "idle" && pollCount > 2) {
                         break
                     }
                 }
