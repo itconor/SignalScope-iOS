@@ -40,32 +40,35 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
     private let format: AVAudioFormat
 
     // 16-bit signed LE, mono, 48 kHz
-    private let sampleRate:  Double = 48_000
-    private let bytesPerSample: Int = 2
-    private let channelCount: AVAudioChannelCount = 1
+    private let sampleRate:     Double            = 48_000
+    private let bytesPerSample: Int               = 2
+    private let channelCount:   AVAudioChannelCount = 1
 
     // Chunk size: 0.1 s = 4800 frames = 9600 bytes
-    private let framesPerBlock: AVAudioFrameCount = 4800
-    private var bytesPerBlock: Int { Int(framesPerBlock) * bytesPerSample }
+    private let framesPerBlock: AVAudioFrameCount = 4_800
+    private var bytesPerBlock:  Int { Int(framesPerBlock) * bytesPerSample }
 
     // Pre-buffer: wait for 1 s of data before starting playback
-    private var preBufferBlocks: Int { 10 }
+    private let preBufferBlocks = 10
 
-    private var dataTask: URLSessionDataTask?
-    private var urlSession: URLSession?
-    private var receivedData = Data()
-    private var scheduledBlockCount = 0
-    private var startedPlayback = false
-    private let lock = NSLock()
+    private var dataTask:      URLSessionDataTask?
+    private var urlSession:    URLSession?
+
+    // All mutable state below is protected by `lock`
+    private let lock            = NSLock()
+    private var receivedData    = Data()
+    private var scheduledBlocks = 0
+    private var playbackStarted = false
+    private var stopped         = false   // set true by stop(); lets delegate thread bail early
 
     // MARK: - Init
 
     override init() {
         format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
-            sampleRate: sampleRate,
-            channels: channelCount,
-            interleaved: false
+            sampleRate:   sampleRate,
+            channels:     channelCount,
+            interleaved:  false
         )!
         super.init()
         engine.attach(playerNode)
@@ -76,6 +79,11 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
 
     func start(url: URL) {
         stop()
+
+        lock.lock()
+        stopped = false
+        lock.unlock()
+
         updateStatus(.connecting)
 
         do {
@@ -90,13 +98,14 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest  = 30
-        config.timeoutIntervalForResource = 3_600  // 1 hour max stream
+        config.timeoutIntervalForResource = 3_600
         let delegate = SessionDelegate(player: self)
         urlSession = URLSession(configuration: config,
                                 delegate: delegate,
                                 delegateQueue: nil)
 
-        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData,
+        var req = URLRequest(url: url,
+                             cachePolicy: .reloadIgnoringLocalCacheData,
                              timeoutInterval: 30)
         req.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         dataTask = urlSession?.dataTask(with: req)
@@ -111,24 +120,33 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
 
         lock.lock()
         receivedData.removeAll()
-        scheduledBlockCount = 0
-        startedPlayback = false
+        scheduledBlocks  = 0
+        playbackStarted  = false
+        stopped          = true
         lock.unlock()
 
-        playerNode.stop()
-        if engine.isRunning { engine.stop() }
+        // Stop audio nodes on the main thread to avoid races with the
+        // delegate queue calling scheduleBuffer / play.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.playerNode.stop()
+            if self.engine.isRunning { self.engine.stop() }
+        }
+
         updateStatus(.stopped)
     }
 
     // MARK: - Internal (called by SessionDelegate)
 
     fileprivate func didReceive(data: Data) {
+        // Bail immediately if stop() was called
         lock.lock()
-        receivedData.append(data)
-        let snapshot = receivedData
+        let isStopped = stopped
+        if !isStopped { receivedData.append(data) }
         lock.unlock()
 
-        scheduleAvailable(from: snapshot)
+        guard !isStopped else { return }
+        processBuffer()
     }
 
     fileprivate func didComplete(error: Error?) {
@@ -136,57 +154,55 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
         updateStatus(error != nil ? .error(error!.localizedDescription) : .stopped)
     }
 
-    // MARK: - Scheduling
+    // MARK: - Buffer processing (runs on URLSession delegate queue)
 
-    private func scheduleAvailable(from data: Data) {
-        lock.lock()
-        var offset = data.count - receivedData.count  // bytes already consumed
-        // Work on a local window of receivedData
-        var localData = receivedData
-        lock.unlock()
-
-        _ = offset  // suppress warning; we work on localData directly
-
-        lock.lock()
-        localData = receivedData
-        lock.unlock()
-
-        var consumed = 0
-        while localData.count - consumed >= bytesPerBlock {
-            let blockData = localData.subdata(in: consumed ..< consumed + bytesPerBlock)
-            consumed += bytesPerBlock
+    private func processBuffer() {
+        // Drain as many complete blocks as possible from receivedData
+        while true {
+            // Take one block under lock
+            lock.lock()
+            guard !stopped, receivedData.count >= bytesPerBlock else {
+                lock.unlock()
+                return
+            }
+            let blockData = receivedData.prefix(bytesPerBlock)
+            receivedData.removeFirst(bytesPerBlock)
+            lock.unlock()
 
             guard let pcmBuf = pcmBuffer(from: blockData) else { continue }
 
+            // Determine whether to start playback — read + write under lock
             lock.lock()
-            scheduledBlockCount += 1
-            let count = scheduledBlockCount
+            let isStopped = stopped
+            guard !isStopped else {
+                lock.unlock()
+                return
+            }
+            scheduledBlocks += 1
+            let count = scheduledBlocks
+            let alreadyPlaying = playbackStarted
+            if count >= preBufferBlocks && !playbackStarted {
+                playbackStarted = true
+            }
             lock.unlock()
+
+            guard engine.isRunning else { return }
 
             playerNode.scheduleBuffer(pcmBuf, completionHandler: nil)
 
-            if !startedPlayback && count >= preBufferBlocks {
-                startedPlayback = true
+            if !alreadyPlaying && count >= preBufferBlocks {
                 playerNode.play()
                 updateStatus(.playing)
-            } else if !startedPlayback {
+            } else if !alreadyPlaying {
                 updateStatus(.buffering)
             }
-        }
-
-        // Remove consumed bytes from the shared buffer
-        if consumed > 0 {
-            lock.lock()
-            if receivedData.count >= consumed {
-                receivedData.removeFirst(consumed)
-            }
-            lock.unlock()
         }
     }
 
     // MARK: - PCM conversion (Int16 LE → Float32)
 
     private func pcmBuffer(from data: Data) -> AVAudioPCMBuffer? {
+        guard data.count == bytesPerBlock else { return nil }
         guard let buf = AVAudioPCMBuffer(pcmFormat: format,
                                          frameCapacity: framesPerBlock) else { return nil }
         buf.frameLength = framesPerBlock
@@ -195,7 +211,7 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
         data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
             let samples = raw.bindMemory(to: Int16.self)
             for i in 0 ..< Int(framesPerBlock) {
-                ch[i] = Float(samples[i]) / 32768.0
+                ch[i] = Float(samples[i]) / 32_768.0
             }
         }
         return buf
