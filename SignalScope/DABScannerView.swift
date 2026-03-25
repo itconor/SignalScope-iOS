@@ -310,9 +310,25 @@ struct DABScannerView: View {
         defer { isScanning = false }
         do {
             try await appModel.api.scanDAB(site: selectedSite, sdrSerial: selectedSerial)
-            statusText = "Scan triggered — refreshing services in 30s"
-            // Poll for updated services after a brief wait
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            // Poll scan_status until done (a full 38-channel scan takes 5-15 min)
+            let deadline = Date().addingTimeInterval(20 * 60)  // 20 minute timeout
+            var pollCount = 0
+            while Date() < deadline {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)  // poll every 5 s
+                if let status = try? await appModel.api.fetchDABScanStatus(site: selectedSite) {
+                    pollCount += 1
+                    let pct = status.total.flatMap { t in
+                        status.progress.map { p in t > 0 ? Int(100 * p / t) : 0 }
+                    } ?? 0
+                    let ch = status.channel.flatMap { $0.isEmpty ? nil : $0 }.map { " (\($0))" } ?? ""
+                    statusText = status.status == "done"
+                        ? "Scan complete — \(status.found ?? 0) service(s) found"
+                        : "Scanning\(ch)… \(pct)%"
+                    if status.status == "done" || status.status == "idle" && pollCount > 2 {
+                        break
+                    }
+                }
+            }
             await loadServices()
         } catch {
             errorMessage = error.localizedDescription

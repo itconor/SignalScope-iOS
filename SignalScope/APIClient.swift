@@ -389,6 +389,13 @@ final class APIClient: ObservableObject {
         }
     }
 
+    func fetchDABScanStatus(site: String) async throws -> DABScanStatus {
+        let encodedSite = site.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? site
+        let req = try makeRequest(path: "/api/mobile/dab/scan_status/\(encodedSite)")
+        let (data, _) = try await URLSession.shared.data(for: req)
+        return try JSONDecoder().decode(DABScanStatus.self, from: data)
+    }
+
     // MARK: - Chain Maintenance
 
     func toggleMaintenance(chainID: String, enable: Bool) async throws -> MaintenanceResponse {

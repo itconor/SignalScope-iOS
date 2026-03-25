@@ -856,6 +856,15 @@ struct DABServicesResponse: Codable {
     let scanned_at: String?
 }
 
+struct DABScanStatus: Codable {
+    let ok: Bool
+    let status: String    // "idle" | "scanning" | "done"
+    let progress: Int?
+    let total: Int?
+    let found: Int?
+    let channel: String?
+}
+
 // MARK: - Maintenance Response
 
 struct MaintenanceResponse: Codable {
