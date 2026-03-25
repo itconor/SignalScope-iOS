@@ -21,6 +21,9 @@ struct FMScannerView: View {
     @State private var statusPollTask: Task<Void, Never>?
     @State private var siteLoadTask: Task<Void, Never>?
 
+    // Custom PCM player — AVPlayer cannot handle raw PCM streams
+    @StateObject private var pcmPlayer = PCMStreamPlayer()
+
     private var parsedFreq: Double? {
         let v = Double(freqText.replacingOccurrences(of: ",", with: ".")) ?? 0
         return (v >= 87.5 && v <= 108.0) ? v : nil
@@ -66,7 +69,15 @@ struct FMScannerView: View {
                 }
             }
             .task { await loadSites() }
-            .onDisappear { stopStatusPoll() }
+            .onDisappear {
+                stopStatusPoll()
+                pcmPlayer.stop()
+            }
+            .onReceive(pcmPlayer.$status) { s in
+                statusText = s.label
+                if s == .playing { isStreaming = true }
+                if s == .stopped || s == .idle { isStreaming = false }
+            }
         }
     }
 
@@ -265,21 +276,17 @@ struct FMScannerView: View {
         defer { isLoading = false }
         do {
             let result = try await appModel.api.startScanner(site: selectedSite, freqMHz: freq, sdrSerial: selectedSerial)
-            guard result.ok, let streamPath = result.mobile_stream_url ?? result.stream_url else {
+            guard result.ok, let slotID = result.slot_id else {
                 errorMessage = result.error ?? "Failed to start scanner"
                 return
             }
-            let resolvedURL = resolveStreamURL(streamPath)
             errorMessage = nil
-            isStreaming = true
-            statusText = "Connecting…"
-            appModel.playAudio(
-                url: resolvedURL,
-                title: String(format: "FM %.1f MHz", freq),
-                subtitle: selectedSite,
-                playlist: [],
-                index: 0
+            // Use the raw PCM endpoint — PCMStreamPlayer handles decoding directly
+            // (AVPlayer cannot play raw PCM streams)
+            let pcmURL = appModel.api.authorizedPlaybackURL(
+                for: resolveStreamURL("/api/mobile/hub/scanner/stream/\(slotID)")
             )
+            pcmPlayer.start(url: pcmURL)
             startStatusPoll()
         } catch {
             errorMessage = error.localizedDescription
@@ -293,21 +300,15 @@ struct FMScannerView: View {
         defer { isLoading = false }
         do {
             let result = try await appModel.api.tuneScanner(site: selectedSite, freqMHz: freq)
-            guard result.ok, let streamPath = result.mobile_stream_url ?? result.stream_url else {
+            guard result.ok, let slotID = result.slot_id else {
                 errorMessage = result.error ?? "Tune failed"
                 return
             }
-            let resolvedURL = resolveStreamURL(streamPath)
-            errorMessage = nil
             rdsPS = ""; rdsRT = ""; rdsStereo = false
-            statusText = "Retuning…"
-            appModel.playAudio(
-                url: resolvedURL,
-                title: String(format: "FM %.1f MHz", freq),
-                subtitle: selectedSite,
-                playlist: [],
-                index: 0
+            let pcmURL = appModel.api.authorizedPlaybackURL(
+                for: resolveStreamURL("/api/mobile/hub/scanner/stream/\(slotID)")
             )
+            pcmPlayer.start(url: pcmURL)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -315,9 +316,8 @@ struct FMScannerView: View {
 
     private func stopAction() async {
         stopStatusPoll()
-        appModel.stopAudio()
+        pcmPlayer.stop()
         isStreaming = false
-        statusText = "Stopped"
         rdsPS = ""; rdsRT = ""; rdsStereo = false
         do {
             try await appModel.api.stopScanner(site: selectedSite)
