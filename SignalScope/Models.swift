@@ -848,6 +848,28 @@ struct DABService: Codable, Identifiable, Hashable {
     let label: String
     let channel: String
     var id: String { "\(channel)/\(label)" }
+
+    private enum CodingKeys: String, CodingKey {
+        case label, name, channel
+    }
+
+    // The server stores services with key "name" (welle-cli output).
+    // Accept both "label" and "name" so the model works with the server as-is.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        channel = try c.decode(String.self, forKey: .channel)
+        if let l = try? c.decodeIfPresent(String.self, forKey: .label), let l, !l.isEmpty {
+            label = l
+        } else {
+            label = try c.decode(String.self, forKey: .name)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(label, forKey: .label)
+        try c.encode(channel, forKey: .channel)
+    }
 }
 
 struct DABServicesResponse: Codable {
