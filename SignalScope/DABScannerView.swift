@@ -22,8 +22,29 @@ struct DABScannerView: View {
     @State private var statusPollTask: Task<Void, Never>?
     @State private var siteLoadTask: Task<Void, Never>?
 
-    // Region / location presets for faster scanning
-    @State private var regions: [DABRegion] = []          // flat list loaded from hub
+    // Region / location presets — hardcoded (Band III channels never change)
+    private static let scanPresets: [(id: String, label: String, icon: String, channels: [String])] = [
+        ("all",          "Full Scan (38 ch)",           "🌍", []),
+        ("uk_ni",        "Northern Ireland (6 ch)",     "🏴", ["11D","11A","12B","12D","9A","9C"]),
+        ("uk_scotland",  "Scotland (5 ch)",              "🏴", ["11D","11B","11C","12B","12C"]),
+        ("uk_wales",     "Wales (4 ch)",                 "🏴", ["11D","11A","12B","12C"]),
+        ("uk_national",  "England — National (3 ch)",   "🇬🇧", ["11D","12B","10B"]),
+        ("uk_london",    "London (6 ch)",                "🇬🇧", ["11D","12B","10B","10C","11C","12D"]),
+        ("uk_northwest", "North West England (5 ch)",   "🇬🇧", ["11D","12B","10B","11A","11C"]),
+        ("uk_northeast", "North East England (4 ch)",   "🇬🇧", ["11D","12B","10B","11B"]),
+        ("uk_yorkshire", "Yorkshire (5 ch)",             "🇬🇧", ["11D","12B","10B","11B","12A"]),
+        ("uk_midlands",  "Midlands (4 ch)",              "🇬🇧", ["11D","12B","10B","11A"]),
+        ("uk_south",     "South England (5 ch)",         "🇬🇧", ["11D","12B","10B","11C","12C"]),
+        ("uk",           "All UK (10 ch)",               "🇬🇧", ["10B","10C","11A","11B","11C","11D","12A","12B","12C","12D"]),
+        ("ireland",      "Republic of Ireland (3 ch)",   "🇮🇪", ["9D","11B","11D"]),
+        ("germany",      "Germany (11 ch)",               "🇩🇪", ["5A","5C","7A","7B","7C","7D","8A","8D","9A","9D","10D"]),
+        ("netherlands",  "Netherlands (6 ch)",            "🇳🇱", ["7C","8A","8B","9B","10A","11A"]),
+        ("france",       "France (6 ch)",                 "🇫🇷", ["10A","10B","10C","10D","11A","11B"]),
+        ("norway",       "Norway (6 ch)",                 "🇳🇴", ["7B","9D","10A","10B","11D","12A"]),
+        ("denmark",      "Denmark (6 ch)",                "🇩🇰", ["10B","10C","10D","11A","11B","11C"]),
+        ("belgium",      "Belgium (4 ch)",                "🇧🇪", ["7B","8A","10B","11D"]),
+        ("switzerland",  "Switzerland (5 ch)",            "🇨🇭", ["7A","7B","7C","8A","12D"]),
+    ]
     @State private var selectedRegionID: String = "all"   // "all" = scan every channel
 
     var body: some View {
@@ -68,10 +89,7 @@ struct DABScannerView: View {
                     }
                 }
             }
-            .task {
-                await loadSites()
-                await loadRegions()
-            }
+            .task { await loadSites() }
             .onDisappear { stopStatusPoll() }
         }
     }
@@ -114,31 +132,26 @@ struct DABScannerView: View {
 
     // MARK: - Services Card
 
-    private var selectedRegion: DABRegion? {
-        regions.first { $0.id == selectedRegionID }
+    private var selectedPreset: (id: String, label: String, icon: String, channels: [String])? {
+        Self.scanPresets.first { $0.id == selectedRegionID }
     }
 
     private var servicesCard: some View {
         PanelCard(title: "Services") {
             VStack(alignment: .leading, spacing: 12) {
 
-                // Region picker — only shown once regions are loaded from hub
-                if !regions.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Scan Region")
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryText)
-                        Picker("Region", selection: $selectedRegionID) {
-                            Text("🌍 Full Scan (\(regions.first?.channels.count ?? 0) ch)").tag("all")
-                            ForEach(regions.dropFirst()) { region in  // skip root "All Europe" entry
-                                let chCount = region.channels.count
-                                Text("\(region.icon.isEmpty ? "📡" : region.icon) \(region.label) (\(chCount) ch)")
-                                    .tag(region.id)
-                            }
+                // Region picker
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Scan Region")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryText)
+                    Picker("Region", selection: $selectedRegionID) {
+                        ForEach(Self.scanPresets, id: \.id) { preset in
+                            Text("\(preset.icon) \(preset.label)").tag(preset.id)
                         }
-                        .pickerStyle(.menu)
-                        .tint(Theme.brandBlue)
                     }
+                    .pickerStyle(.menu)
+                    .tint(Theme.brandBlue)
                 }
 
                 HStack {
@@ -335,21 +348,13 @@ struct DABScannerView: View {
         }
     }
 
-    private func loadRegions() async {
-        guard appModel.api.baseURL != nil else { return }
-        if let rootRegion = try? await appModel.api.fetchDABRegions() {
-            // Flatten to a list: root first, then all descendants
-            regions = rootRegion.allDescendants
-        }
-    }
-
     private func scanAction() async {
         guard !selectedSite.isEmpty else { return }
         isScanning = true
         defer { isScanning = false }
         do {
-            // Pass selected region's channels (nil = all channels = full scan)
-            let channels: [String]? = selectedRegionID == "all" ? nil : selectedRegion?.channels
+            // Pass selected preset's channels (nil = all channels = full scan)
+            let channels: [String]? = selectedRegionID == "all" ? nil : selectedPreset?.channels
             let chDesc = channels.map { "\($0.count) ch" } ?? "full scan"
             try await appModel.api.scanDAB(site: selectedSite, sdrSerial: selectedSerial, channels: channels)
             statusText = "Scan started (\(chDesc)) — polling for progress…"

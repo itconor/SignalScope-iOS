@@ -125,12 +125,21 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
         stopped          = true
         lock.unlock()
 
-        // Stop audio nodes on the main thread to avoid races with the
-        // delegate queue calling scheduleBuffer / play.
-        DispatchQueue.main.async { [weak self] in
+        // AVAudioEngine must be stopped on the main thread.
+        // Use sync-if-main so that start() (also on main thread) never races:
+        // if stop() is called from main, engine.stop() completes before
+        // returning, so a subsequent engine.start() in start() is safe.
+        // If called from a background thread (e.g. onDisappear on non-main),
+        // async is fine because start() won't be called mid-stop.
+        let stopNodes = { [weak self] in
             guard let self else { return }
             self.playerNode.stop()
             if self.engine.isRunning { self.engine.stop() }
+        }
+        if Thread.isMainThread {
+            stopNodes()
+        } else {
+            DispatchQueue.main.async(execute: stopNodes)
         }
 
         updateStatus(.stopped)
