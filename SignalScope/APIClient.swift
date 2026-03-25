@@ -399,8 +399,9 @@ final class APIClient: ObservableObject {
     }
 
     func fetchDABScanStatus(site: String) async throws -> DABScanStatus {
-        let encodedSite = site.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? site
-        let req = try makeRequest(path: "/api/mobile/dab/scan_status/\(encodedSite)")
+        // Pass raw site name — makeRequest/appendingPathComponent handles encoding
+        // (pre-encoding causes double-encode: %20 → %2520 on the wire)
+        let req = try makeRequest(path: "/api/mobile/dab/scan_status/\(site)")
         let (data, _) = try await URLSession.shared.data(for: req)
         return try JSONDecoder().decode(DABScanStatus.self, from: data)
     }

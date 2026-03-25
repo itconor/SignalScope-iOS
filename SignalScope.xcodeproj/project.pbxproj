@@ -6,19 +6,90 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A9CB62652F7038BF00496E14 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9CB62642F7038BF00496E14 /* WidgetKit.framework */; };
+		A9CB62672F7038BF00496E14 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9CB62662F7038BF00496E14 /* SwiftUI.framework */; };
+		A9CB62762F7038C000496E14 /* SignalScopeWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A9CB62622F7038BF00496E14 /* SignalScopeWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A9CB62742F7038C000496E14 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A9FED0842F6EF9FC006DFE8E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A9CB62612F7038BF00496E14;
+			remoteInfo = SignalScopeWidgetsExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A9CB62772F7038C000496E14 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A9CB62762F7038C000496E14 /* SignalScopeWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		A95B17AF2F743E74007A011B /* SignalScopeWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SignalScopeWidgetsExtension.entitlements; sourceTree = "<group>"; };
+		A9CB62622F7038BF00496E14 /* SignalScopeWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SignalScopeWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9CB62642F7038BF00496E14 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		A9CB62662F7038BF00496E14 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		A9FED08C2F6EF9FC006DFE8E /* SignalScope.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SignalScope.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A913CF502F700F0B00DD23BF /* Exceptions for "SignalScope" folder in "SignalScope" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A9FED08B2F6EF9FC006DFE8E /* SignalScope */;
+		};
+		A9CB627B2F7038C000496E14 /* Exceptions for "SignalScopeWidgets" folder in "SignalScopeWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A9CB62612F7038BF00496E14 /* SignalScopeWidgetsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A9CB62682F7038C000496E14 /* SignalScopeWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A9CB627B2F7038C000496E14 /* Exceptions for "SignalScopeWidgets" folder in "SignalScopeWidgetsExtension" target */,
+			);
+			path = SignalScopeWidgets;
+			sourceTree = "<group>";
+		};
 		A9FED08E2F6EF9FC006DFE8E /* SignalScope */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A913CF502F700F0B00DD23BF /* Exceptions for "SignalScope" folder in "SignalScope" target */,
+			);
 			path = SignalScope;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A9CB625F2F7038BF00496E14 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9CB62672F7038BF00496E14 /* SwiftUI.framework in Frameworks */,
+				A9CB62652F7038BF00496E14 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A9FED0892F6EF9FC006DFE8E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -29,10 +100,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A9CB62632F7038BF00496E14 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A9CB62642F7038BF00496E14 /* WidgetKit.framework */,
+				A9CB62662F7038BF00496E14 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		A9FED0832F6EF9FC006DFE8E = {
 			isa = PBXGroup;
 			children = (
+				A95B17AF2F743E74007A011B /* SignalScopeWidgetsExtension.entitlements */,
 				A9FED08E2F6EF9FC006DFE8E /* SignalScope */,
+				A9CB62682F7038C000496E14 /* SignalScopeWidgets */,
+				A9CB62632F7038BF00496E14 /* Frameworks */,
 				A9FED08D2F6EF9FC006DFE8E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +124,7 @@
 			isa = PBXGroup;
 			children = (
 				A9FED08C2F6EF9FC006DFE8E /* SignalScope.app */,
+				A9CB62622F7038BF00496E14 /* SignalScopeWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,6 +132,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A9CB62612F7038BF00496E14 /* SignalScopeWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9CB627A2F7038C000496E14 /* Build configuration list for PBXNativeTarget "SignalScopeWidgetsExtension" */;
+			buildPhases = (
+				A9CB625E2F7038BF00496E14 /* Sources */,
+				A9CB625F2F7038BF00496E14 /* Frameworks */,
+				A9CB62602F7038BF00496E14 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A9CB62682F7038C000496E14 /* SignalScopeWidgets */,
+			);
+			name = SignalScopeWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = SignalScopeWidgetsExtension;
+			productReference = A9CB62622F7038BF00496E14 /* SignalScopeWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		A9FED08B2F6EF9FC006DFE8E /* SignalScope */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A9FED0972F6EF9FC006DFE8E /* Build configuration list for PBXNativeTarget "SignalScope" */;
@@ -55,10 +161,12 @@
 				A9FED0882F6EF9FC006DFE8E /* Sources */,
 				A9FED0892F6EF9FC006DFE8E /* Frameworks */,
 				A9FED08A2F6EF9FC006DFE8E /* Resources */,
+				A9CB62772F7038C000496E14 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A9CB62752F7038C000496E14 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A9FED08E2F6EF9FC006DFE8E /* SignalScope */,
@@ -80,6 +188,9 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					A9CB62612F7038BF00496E14 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					A9FED08B2F6EF9FC006DFE8E = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -100,11 +211,19 @@
 			projectRoot = "";
 			targets = (
 				A9FED08B2F6EF9FC006DFE8E /* SignalScope */,
+				A9CB62612F7038BF00496E14 /* SignalScopeWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A9CB62602F7038BF00496E14 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A9FED08A2F6EF9FC006DFE8E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -115,6 +234,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A9CB625E2F7038BF00496E14 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A9FED0882F6EF9FC006DFE8E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -124,7 +250,79 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		A9CB62752F7038C000496E14 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A9CB62612F7038BF00496E14 /* SignalScopeWidgetsExtension */;
+			targetProxy = A9CB62742F7038C000496E14 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		A9CB62782F7038C000496E14 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = SignalScopeWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = XCD4QFG3F2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SignalScopeWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = SignalScopeWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = conorewings.SignalScope.SignalScopeWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A9CB62792F7038C000496E14 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = SignalScopeWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = XCD4QFG3F2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SignalScopeWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = SignalScopeWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = conorewings.SignalScope.SignalScopeWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		A9FED0952F6EF9FC006DFE8E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -251,17 +449,22 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SignalScope/SignalScope.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 9;
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = XCD4QFG3F2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SignalScope/Info.plist;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_WKSupportsLiveActivityLaunchAttributeTypes = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -284,17 +487,22 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SignalScope/SignalScope.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 9;
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = XCD4QFG3F2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SignalScope/Info.plist;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_WKSupportsLiveActivityLaunchAttributeTypes = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -315,6 +523,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A9CB627A2F7038C000496E14 /* Build configuration list for PBXNativeTarget "SignalScopeWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9CB62782F7038C000496E14 /* Debug */,
+				A9CB62792F7038C000496E14 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A9FED0872F6EF9FC006DFE8E /* Build configuration list for PBXProject "SignalScope" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
