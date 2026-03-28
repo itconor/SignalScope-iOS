@@ -257,6 +257,15 @@ final class APIClient: ObservableObject {
         return decoded.results
     }
 
+    func fetchABGroups() async throws -> [ABGroup] {
+        var req = try makeRequest(path: "/api/mobile/ab_groups")
+        req.httpMethod = "GET"
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(ABGroupsResponse.self, from: data).results
+    }
 
     // MARK: - FM Scanner
 
@@ -419,6 +428,7 @@ final class APIClient: ObservableObject {
         }
         return try JSONDecoder().decode(MaintenanceResponse.self, from: data)
     }
+
 
     /// Polls the specified path until the provided condition closure returns true or the timeout is reached.
     /// - Parameters:

@@ -424,6 +424,11 @@ private struct StreamRow: View {
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(stream.rtpJitterColor)
                     }
+                    if let glitchLabel = stream.glitchLabel {
+                        Text(glitchLabel)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                    }
                 }
             }
 

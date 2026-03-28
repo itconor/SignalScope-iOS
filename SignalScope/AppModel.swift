@@ -81,6 +81,9 @@ final class AppModel: ObservableObject {
     @Published var hubOverview: HubOverviewResponse?
     @Published var hubOverviewError: String?
 
+    @Published var abGroups: [ABGroup] = []
+    @Published var abGroupsError: String? = nil
+
     @Published var loadingAudioURL: URL?   // set while AVPlayer is buffering, cleared when .playing
 
     let api = APIClient()
@@ -175,6 +178,7 @@ final class AppModel: ObservableObject {
     func refreshAll() async {
         await fetchChains()
         await refreshHubOverview()
+        await refreshABGroups()
         writeWidgetData()
     }
 
@@ -313,6 +317,18 @@ final class AppModel: ObservableObject {
         } catch {
             if error is CancellationError { return }
             hubOverviewError = error.localizedDescription
+        }
+    }
+
+    func refreshABGroups() async {
+        guard api.baseURL != nil else { return }
+        do {
+            let groups = try await api.fetchABGroups()
+            abGroups = groups
+            abGroupsError = nil
+        } catch {
+            if error is CancellationError { return }
+            abGroupsError = error.localizedDescription
         }
     }
 

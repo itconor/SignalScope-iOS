@@ -91,7 +91,14 @@ struct HubStream: Codable, Identifiable, Hashable {
     // Live stream URL for quick-listen
     let live_url: String?
 
+    let glitch_count: Int?
+
     var id: String { name }
+
+    var glitchLabel: String? {
+        guard let count = glitch_count, count > 0 else { return nil }
+        return "⚡ \(count) glitch\(count == 1 ? "" : "es")"
+    }
 
     /// Non-nil when there is meaningful RTP packet loss (> 0).
     var rtpLossLabel: String? {
@@ -380,6 +387,7 @@ struct ChainNode: Codable, Identifiable, Hashable {
     let ts: TimeInterval?
     let mode: String?
     let rtp_loss_pct: Double?
+    let glitch_count: Int?
     let nodes: [ChainNode]?
 
     var id: String {
@@ -457,6 +465,11 @@ struct ChainNode: Codable, Identifiable, Hashable {
         let age = Date().timeIntervalSince1970 - freshestTimestamp
         guard age > 30 else { return nil }
         return "Telemetry age \(age.formattedSeconds())"
+    }
+
+    var glitchLabel: String? {
+        guard let count = glitch_count, count > 0 else { return nil }
+        return "⚡ \(count)"
     }
 
     var signalFraction: Double? {
@@ -767,6 +780,47 @@ struct MetricHistoryResponse: Codable {
     let metric: String
     let hours: Int
     let points: [MetricPoint]
+}
+
+// MARK: - A/B Groups
+
+struct ABGroup: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let active_role: String   // "a" or "b"
+    let notes: String
+    let chain_a_id: String
+    let chain_a_name: String
+    let chain_b_id: String
+    let chain_b_name: String
+    let status: String        // "ok" | "warn" | "fault" | "unknown"
+    let a_ok: Bool
+    let b_ok: Bool
+    let rx_ok: Bool
+    let since: Double
+
+    var statusColor: Color {
+        switch status {
+        case "fault":   return Theme.faultRed
+        case "warn":    return Theme.pendingAmber
+        case "ok":      return Theme.okGreen
+        default:        return Theme.mutedText
+        }
+    }
+
+    var activeName: String {
+        active_role == "b" ? chain_b_name : chain_a_name
+    }
+
+    var standbyName: String {
+        active_role == "b" ? chain_a_name : chain_b_name
+    }
+}
+
+struct ABGroupsResponse: Codable {
+    let ok: Bool
+    let results: [ABGroup]
+    let count: Int
 }
 
 // MARK: - Hub navigation

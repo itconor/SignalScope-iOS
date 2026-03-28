@@ -680,6 +680,18 @@ private struct NodeTreeView: View {
                             .foregroundStyle(Theme.pendingAmber)
                     }
 
+                    if let glitchLabel = node.glitchLabel {
+                        Label(glitchLabel, systemImage: "bolt.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.orange)
+                    }
+
+                    if let loss = node.rtp_loss_pct, loss > 0 {
+                        Text(String(format: "RTP %.1f%% loss", loss))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(loss >= 5 ? Theme.faultRed : Theme.pendingAmber)
+                    }
+
                     if let reason = node.reason, !reason.isEmpty {
                         Text(reason)
                             .font(.footnote)
@@ -716,7 +728,8 @@ private struct NodeTreeView: View {
                             name: stream, format: "", level_dbfs: nil, sla_pct: nil,
                             ai_status: "ok", ai_phase: "", rtp_loss_pct: nil,
                             rtp_jitter_ms: nil, fm_rds_ps: nil, fm_rds_rt: nil,
-                            dab_service: nil, dab_dls: nil, dab_ensemble: nil, live_url: nil
+                            dab_service: nil, dab_dls: nil, dab_ensemble: nil,
+                            live_url: nil, glitch_count: nil
                         )
                         NavigationLink(value: HubStreamRef(siteName: site, stream: fakeStream)) {
                             Label("Signal history", systemImage: "chart.line.uptrend.xyaxis")

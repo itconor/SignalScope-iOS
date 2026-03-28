@@ -383,12 +383,22 @@ private struct ReportEventCard: View {
                             .foregroundStyle(Theme.secondaryText)
                     }
                     Spacer()
-                    Text(event.type.replacingOccurrences(of: "_", with: " "))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(event.clip ? Theme.pendingAmber : Theme.brandBlue))
+                    HStack(spacing: 4) {
+                        if event.type == "GLITCH" || event.type == "AUDIO_GLITCH_SUSTAINED" {
+                            Image(systemName: "bolt.fill")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.black)
+                        }
+                        Text(event.type.replacingOccurrences(of: "_", with: " "))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.black)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(
+                        (event.type == "GLITCH" || event.type == "AUDIO_GLITCH_SUSTAINED") ? Color.orange :
+                        event.clip ? Theme.pendingAmber : Theme.brandBlue
+                    ))
                 }
 
                 if !event.chain.isEmpty {

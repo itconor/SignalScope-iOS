@@ -27,33 +27,39 @@ struct ContentView: View {
                 }
                 .tag(2)
 
+            ABGroupsView()
+                .tabItem {
+                    Label("A/B Groups", systemImage: "arrow.left.arrow.right.circle")
+                }
+                .tag(3)
+
             ReportsView()
                 .tabItem {
                     Image(systemName: "doc.text.magnifyingglass")
                     Text("Reports")
                 }
-                .tag(3)
+                .tag(4)
 
             FMScannerView()
                 .tabItem {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                     Text("FM")
                 }
-                .tag(4)
+                .tag(5)
 
             DABScannerView()
                 .tabItem {
                     Image(systemName: "radio")
                     Text("DAB")
                 }
-                .tag(5)
+                .tag(6)
 
             SettingsView()
                 .tabItem {
                     Image(systemName: "gearshape")
                     Text("Settings")
                 }
-                .tag(6)
+                .tag(7)
         }
         .tint(Theme.brandBlue)
         .preferredColorScheme(.dark)
