@@ -21,7 +21,7 @@ The iOS companion app for [SignalScope](https://github.com/itconor/SignalScope) 
 
 ## Requirements
 
-- iOS 16.2+ (Live Activities require iOS 16.2; core features work on iOS 16.0+)
+- iOS 17.0+
 - A running [SignalScope](https://github.com/itconor/SignalScope) hub with the mobile API enabled
 - Xcode 15+
 
