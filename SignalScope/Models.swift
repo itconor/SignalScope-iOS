@@ -1038,7 +1038,14 @@ extension LoggerSegment: Codable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         filename    = try c.decode(String.self, forKey: .filename)
-        start_s     = try c.decode(Double.self,  forKey: .start_s)
+        // start_s is REAL in SQLite but filesystem-fallback rows may emit a JSON integer
+        if let d = try? c.decode(Double.self, forKey: .start_s) {
+            start_s = d
+        } else if let i = try? c.decode(Int.self, forKey: .start_s) {
+            start_s = Double(i)
+        } else {
+            start_s = 0
+        }
         silence_pct = try c.decodeIfPresent(Double.self, forKey: .silence_pct)
         // Python SQLite stores has_silence as 0/1 integer; handle both int and bool
         if let b = try? c.decodeIfPresent(Bool.self, forKey: .has_silence) {
