@@ -8,6 +8,18 @@ struct ContentView: View {
     // Logger tab (7) locks to landscape only when LoggerDayView is pushed.
     // All other situations → portrait.  We explicitly request portrait on unlock
     // so the app snaps back immediately rather than waiting for a physical tilt.
+
+    /// Called once on cold launch to snap back to portrait regardless of what
+    /// orientation the previous session left the window in.
+    private func forcePortrait() {
+        AppDelegate.orientationLock = .all
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            scene.requestGeometryUpdate(
+                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
+            ) { _ in }
+        }
+    }
+
     private func applyOrientation() {
         let wantLandscape = appModel.lastSelectedTab == 7 && appModel.loggerDayViewActive
         if wantLandscape {
@@ -99,6 +111,9 @@ struct ContentView: View {
         .tint(Theme.brandBlue)
         .preferredColorScheme(.dark)
         .background(Theme.backgroundGradient.ignoresSafeArea())
+        // Force portrait on cold launch — onChange never fires at startup so a previous
+        // landscape session would leave the app stuck sideways without this.
+        .onAppear { forcePortrait() }
         // Tab switch → always re-evaluate orientation (ensures unlock when leaving Logger)
         .onChange(of: appModel.lastSelectedTab)    { applyOrientation() }
         // LoggerDayView pushed/popped → lock or unlock within the Logger tab
