@@ -54,12 +54,19 @@ struct ContentView: View {
                 }
                 .tag(6)
 
+            LoggerView()
+                .tabItem {
+                    Image(systemName: "waveform.and.mic")
+                    Text("Logger")
+                }
+                .tag(7)
+
             SettingsView()
                 .tabItem {
                     Image(systemName: "gearshape")
                     Text("Settings")
                 }
-                .tag(7)
+                .tag(8)
         }
         .tint(Theme.brandBlue)
         .preferredColorScheme(.dark)

@@ -1004,3 +1004,127 @@ extension Double {
         String(format: "%.1f dBFS", self)
     }
 }
+
+// MARK: - Logger
+
+struct LoggerStream: Identifiable, Codable, Hashable {
+    let name: String
+    let slug: String
+    var id: String { slug }
+}
+
+struct LoggerSegment: Identifiable {
+    let filename: String
+    let start_s: Double
+    let hasSilence: Bool
+    let silence_pct: Double?
+    var id: String { filename }
+
+    var startLabel: String {
+        let totalSeconds = Int(start_s)
+        let h = totalSeconds / 3600
+        let m = (totalSeconds % 3600) / 60
+        return String(format: "%02d:%02d", h, m)
+    }
+
+    var durationLabel: String { "5 min" }
+}
+
+extension LoggerSegment: Codable {
+    enum CodingKeys: String, CodingKey {
+        case filename, start_s, has_silence, silence_pct
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        filename    = try c.decode(String.self, forKey: .filename)
+        start_s     = try c.decode(Double.self,  forKey: .start_s)
+        silence_pct = try c.decodeIfPresent(Double.self, forKey: .silence_pct)
+        // Python SQLite stores has_silence as 0/1 integer; handle both int and bool
+        if let b = try? c.decodeIfPresent(Bool.self, forKey: .has_silence) {
+            hasSilence = b ?? false
+        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .has_silence) {
+            hasSilence = (i ?? 0) != 0
+        } else {
+            hasSilence = false
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(filename,    forKey: .filename)
+        try c.encode(start_s,     forKey: .start_s)
+        try c.encode(hasSilence,  forKey: .has_silence)
+        try c.encodeIfPresent(silence_pct, forKey: .silence_pct)
+    }
+}
+
+struct LoggerMetaEvent: Identifiable, Codable {
+    let ts_s: Double
+    let type: String
+    let title: String?
+    let artist: String?
+    let show_name: String?
+    let presenter: String?
+    var id: String { "\(ts_s)-\(type)-\(title ?? "")" }
+
+    var isShow: Bool { type == "show" }
+    var isTrack: Bool { type == "track" }
+    var isMicOn: Bool  { type == "mic_on" }
+    var isMicOff: Bool { type == "mic_off" }
+
+    var primaryLabel: String {
+        if isTrack { return (title ?? "").isEmpty ? "Unknown Track" : title! }
+        if isShow  { return (show_name ?? "").isEmpty ? "Show" : show_name! }
+        if isMicOn  { return "Mic On" }
+        if isMicOff { return "Mic Off" }
+        return (title ?? "").isEmpty ? type : title!
+    }
+
+    var secondaryLabel: String? {
+        if isTrack, let a = artist, !a.isEmpty { return a }
+        if isShow,  let p = presenter, !p.isEmpty { return p }
+        return nil
+    }
+
+    var timeLabel: String {
+        let totalSeconds = Int(ts_s)
+        let h = totalSeconds / 3600
+        let m = (totalSeconds % 3600) / 60
+        return String(format: "%02d:%02d", h, m)
+    }
+}
+
+struct LoggerStatusResponse: Codable {
+    let installed: Bool
+}
+
+struct LoggerSitesResponse: Codable {
+    let sites: [String]
+}
+
+struct LoggerStreamsResponse: Codable {
+    let streams: [LoggerStream]
+}
+
+struct LoggerDaysResponse: Codable {
+    let days: [String]
+    let pending: Bool?
+}
+
+struct LoggerSegmentsResponse: Codable {
+    let segments: [LoggerSegment]
+    let pending: Bool?
+}
+
+struct LoggerMetadataResponse: Codable {
+    let events: [LoggerMetaEvent]
+    let pending: Bool?
+}
+
+struct LoggerPlayResponse: Codable {
+    let ok: Bool?
+    let slot_id: String?
+    let stream_url: String?
+    let error: String?
+}

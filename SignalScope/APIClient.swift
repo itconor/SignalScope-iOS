@@ -430,6 +430,123 @@ final class APIClient: ObservableObject {
     }
 
 
+    // MARK: - Logger
+
+    func fetchLoggerStatus() async throws -> LoggerStatusResponse {
+        var req = try makeRequest(path: "/api/mobile/logger/status")
+        req.httpMethod = "GET"
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(LoggerStatusResponse.self, from: data)
+    }
+
+    func fetchLoggerSites() async throws -> [String] {
+        var req = try makeRequest(path: "/api/mobile/logger/sites")
+        req.httpMethod = "GET"
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(LoggerSitesResponse.self, from: data).sites
+    }
+
+    func fetchLoggerStreams(site: String? = nil) async throws -> [LoggerStream] {
+        guard var components = URLComponents(url: try makeRequest(path: "/api/mobile/logger/streams").url!, resolvingAgainstBaseURL: false) else { throw URLError(.badURL) }
+        if let site, !site.isEmpty { components.queryItems = [URLQueryItem(name: "site", value: site)] }
+        guard let url = components.url else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if !token.isEmpty {
+            switch authStyle {
+            case .bearer:  req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            case .xApiKey: req.setValue(token, forHTTPHeaderField: "X-API-Key")
+            }
+        }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        return try JSONDecoder().decode(LoggerStreamsResponse.self, from: data).streams
+    }
+
+    func fetchLoggerDays(site: String, slug: String) async throws -> LoggerDaysResponse {
+        guard var components = URLComponents(url: try makeRequest(path: "/api/mobile/logger/days").url!, resolvingAgainstBaseURL: false) else { throw URLError(.badURL) }
+        var items: [URLQueryItem] = [URLQueryItem(name: "slug", value: slug)]
+        if !site.isEmpty { items.append(URLQueryItem(name: "site", value: site)) }
+        components.queryItems = items
+        guard let url = components.url else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if !token.isEmpty {
+            switch authStyle {
+            case .bearer:  req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            case .xApiKey: req.setValue(token, forHTTPHeaderField: "X-API-Key")
+            }
+        }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        return try JSONDecoder().decode(LoggerDaysResponse.self, from: data)
+    }
+
+    func fetchLoggerSegments(site: String, slug: String, date: String) async throws -> LoggerSegmentsResponse {
+        guard var components = URLComponents(url: try makeRequest(path: "/api/mobile/logger/segments").url!, resolvingAgainstBaseURL: false) else { throw URLError(.badURL) }
+        var items = [URLQueryItem(name: "slug", value: slug), URLQueryItem(name: "date", value: date)]
+        if !site.isEmpty { items.append(URLQueryItem(name: "site", value: site)) }
+        components.queryItems = items
+        guard let url = components.url else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if !token.isEmpty {
+            switch authStyle {
+            case .bearer:  req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            case .xApiKey: req.setValue(token, forHTTPHeaderField: "X-API-Key")
+            }
+        }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        return try JSONDecoder().decode(LoggerSegmentsResponse.self, from: data)
+    }
+
+    func fetchLoggerMetadata(site: String, slug: String, date: String) async throws -> LoggerMetadataResponse {
+        guard var components = URLComponents(url: try makeRequest(path: "/api/mobile/logger/metadata").url!, resolvingAgainstBaseURL: false) else { throw URLError(.badURL) }
+        var items = [URLQueryItem(name: "slug", value: slug), URLQueryItem(name: "date", value: date)]
+        if !site.isEmpty { items.append(URLQueryItem(name: "site", value: site)) }
+        components.queryItems = items
+        guard let url = components.url else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if !token.isEmpty {
+            switch authStyle {
+            case .bearer:  req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            case .xApiKey: req.setValue(token, forHTTPHeaderField: "X-API-Key")
+            }
+        }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        return try JSONDecoder().decode(LoggerMetadataResponse.self, from: data)
+    }
+
+    func startLoggerPlay(site: String, slug: String, date: String, filename: String, seekSeconds: Double) async throws -> LoggerPlayResponse {
+        var req = try makeRequest(path: "/api/mobile/logger/play")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "site": site, "slug": slug, "date": date, "filename": filename, "seek_s": seekSeconds
+        ])
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        return try JSONDecoder().decode(LoggerPlayResponse.self, from: data)
+    }
+
+    func stopLoggerPlay(site: String) async throws {
+        var req = try makeRequest(path: "/api/mobile/logger/stop")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["site": site])
+        let (_, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+    }
+
     /// Polls the specified path until the provided condition closure returns true or the timeout is reached.
     /// - Parameters:
     ///   - path: The API endpoint path to poll.
