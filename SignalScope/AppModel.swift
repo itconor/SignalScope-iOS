@@ -85,6 +85,7 @@ final class AppModel: ObservableObject {
     @Published var abGroupsError: String? = nil
 
     @Published var loadingAudioURL: URL?   // set while AVPlayer is buffering, cleared when .playing
+    @Published var loggerDayViewActive: Bool = false   // true only when LoggerDayView is on screen
     @Published var loggerInstalled: Bool = false
 
     let api = APIClient()

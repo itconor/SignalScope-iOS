@@ -1,7 +1,22 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var appModel: AppModel
+
+    // MARK: - Orientation management
+    // Logger tab (7) locks to landscape only when LoggerDayView is pushed.
+    // All other situations → .all.  Driven here so tab switches always unlock.
+    private func applyOrientation() {
+        let wantLandscape = appModel.lastSelectedTab == 7 && appModel.loggerDayViewActive
+        let mask: UIInterfaceOrientationMask = wantLandscape ? .landscape : .all
+        guard AppDelegate.orientationLock != mask else { return }
+        AppDelegate.orientationLock = mask
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
+            scene.requestGeometryUpdate(prefs) { _ in }
+        }
+    }
 
     var body: some View {
         TabView(selection: $appModel.lastSelectedTab) {
@@ -71,6 +86,10 @@ struct ContentView: View {
         .tint(Theme.brandBlue)
         .preferredColorScheme(.dark)
         .background(Theme.backgroundGradient.ignoresSafeArea())
+        // Tab switch → always re-evaluate orientation (ensures unlock when leaving Logger)
+        .onChange(of: appModel.lastSelectedTab)    { applyOrientation() }
+        // LoggerDayView pushed/popped → lock or unlock within the Logger tab
+        .onChange(of: appModel.loggerDayViewActive) { applyOrientation() }
         .overlay(alignment: .top) {
             if appModel.hasActiveFaults {
                 faultBanner

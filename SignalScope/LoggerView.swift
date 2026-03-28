@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 // MARK: - LoggerView (root tab)
 
@@ -529,8 +528,8 @@ struct LoggerDayView: View {
             }
         }
         .task { await loadAll() }
-        .onAppear  { lockToLandscape() }
-        .onDisappear { stopPlayback(); unlockOrientation() }
+        .onAppear  { appModel.loggerDayViewActive = true }
+        .onDisappear { stopPlayback(); appModel.loggerDayViewActive = false }
         .safeAreaInset(edge: .bottom) {
             if playingFilename != nil || isStartingPlayback {
                 playerBar.padding(.horizontal, 12).padding(.bottom, 6)
@@ -1007,24 +1006,6 @@ struct LoggerDayView: View {
         } catch {
             playbackError     = error.localizedDescription
             isStartingPlayback = false
-        }
-    }
-
-    // MARK: - Orientation helpers
-
-    private func lockToLandscape() {
-        AppDelegate.orientationLock = .landscape
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)
-            scene.requestGeometryUpdate(prefs) { _ in }
-        }
-    }
-
-    private func unlockOrientation() {
-        AppDelegate.orientationLock = .all
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .all)
-            scene.requestGeometryUpdate(prefs) { _ in }
         }
     }
 
