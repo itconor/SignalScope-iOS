@@ -6,6 +6,8 @@ struct SignalScopeWidgetsBundle: WidgetBundle {
     var body: some Widget {
         ChainFaultLiveActivity()
         SignalScopeWidgets()
-        SignalScopeWidgetsControl()
+        if #available(iOS 18.0, *) {
+            SignalScopeWidgetsControl()
+        }
     }
 }
