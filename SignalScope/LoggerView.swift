@@ -528,8 +528,29 @@ struct LoggerDayView: View {
             }
         }
         .task { await loadAll() }
-        .onAppear  { appModel.loggerDayViewActive = true }
-        .onDisappear { stopPlayback(); appModel.loggerDayViewActive = false }
+        .onAppear {
+            appModel.loggerDayViewActive = true
+            // Force landscape directly — onChange in ContentView is too indirect
+            // and can miss the rotation when navigating into this view.
+            AppDelegate.orientationLock = .landscape
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                scene.requestGeometryUpdate(
+                    UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)
+                ) { _ in }
+            }
+        }
+        .onDisappear {
+            stopPlayback()
+            appModel.loggerDayViewActive = false
+            // ContentView's onChange(lastSelectedTab) handles the portrait
+            // restore when switching tabs; this covers the back-button case.
+            AppDelegate.orientationLock = .all
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                scene.requestGeometryUpdate(
+                    UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
+                ) { _ in }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             if playingFilename != nil || isStartingPlayback {
                 playerBar.padding(.horizontal, 12).padding(.bottom, 6)
