@@ -56,25 +56,3 @@ struct SignalScopeWidgetsLiveActivity: Widget {
     }
 }
 
-extension SignalScopeWidgetsAttributes {
-    fileprivate static var preview: SignalScopeWidgetsAttributes {
-        SignalScopeWidgetsAttributes(name: "World")
-    }
-}
-
-extension SignalScopeWidgetsAttributes.ContentState {
-    fileprivate static var smiley: SignalScopeWidgetsAttributes.ContentState {
-        SignalScopeWidgetsAttributes.ContentState(emoji: "😀")
-     }
-     
-     fileprivate static var starEyes: SignalScopeWidgetsAttributes.ContentState {
-         SignalScopeWidgetsAttributes.ContentState(emoji: "🤩")
-     }
-}
-
-#Preview("Notification", as: .content, using: SignalScopeWidgetsAttributes.preview) {
-   SignalScopeWidgetsLiveActivity()
-} contentStates: {
-    SignalScopeWidgetsAttributes.ContentState.smiley
-    SignalScopeWidgetsAttributes.ContentState.starEyes
-}
