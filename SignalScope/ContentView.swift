@@ -1,6 +1,22 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Sidebar-adaptable tab style (iPad / iOS 18+)
+// On iPadOS 18+ the new tab bar design can silently drop tabs from the
+// "More" overflow when using the legacy .tabItem{} API with many tabs.
+// .sidebarAdaptable shows ALL tabs in a collapsible sidebar on iPad and
+// falls back to the standard bottom bar on iPhone / iOS 17.
+private extension View {
+    @ViewBuilder
+    func adaptiveTabStyle() -> some View {
+        if #available(iOS 18.0, *) {
+            self.tabViewStyle(.sidebarAdaptable)
+        } else {
+            self
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var appModel: AppModel
 
@@ -108,6 +124,7 @@ struct ContentView: View {
                 }
                 .tag(8)
         }
+        .adaptiveTabStyle()
         .tint(Theme.brandBlue)
         .preferredColorScheme(.dark)
         .background(Theme.backgroundGradient.ignoresSafeArea())
