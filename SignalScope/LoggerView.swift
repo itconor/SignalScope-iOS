@@ -530,25 +530,27 @@ struct LoggerDayView: View {
         .task { await loadAll() }
         .onAppear {
             appModel.loggerDayViewActive = true
-            // Force landscape directly — onChange in ContentView is too indirect
-            // and can miss the rotation when navigating into this view.
             AppDelegate.orientationLock = .landscape
             if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 scene.requestGeometryUpdate(
                     UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)
                 ) { _ in }
+                // Tell the root view controller to re-query supported orientations —
+                // without this iOS ignores the geometry request on newer builds.
+                scene.windows.first?.rootViewController?
+                    .setNeedsUpdateOfSupportedInterfaceOrientations()
             }
         }
         .onDisappear {
             stopPlayback()
             appModel.loggerDayViewActive = false
-            // ContentView's onChange(lastSelectedTab) handles the portrait
-            // restore when switching tabs; this covers the back-button case.
             AppDelegate.orientationLock = .all
             if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 scene.requestGeometryUpdate(
                     UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
                 ) { _ in }
+                scene.windows.first?.rootViewController?
+                    .setNeedsUpdateOfSupportedInterfaceOrientations()
             }
         }
         .safeAreaInset(edge: .bottom) {
