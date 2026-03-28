@@ -417,8 +417,6 @@ struct LoggerDayView: View {
     @GestureState private var liveDragX:  CGFloat = 0
     @GestureState private var liveScale:  CGFloat = 1.0
 
-    // Grid sheet
-    @State private var gridDetent: PresentationDetent = .height(44)
 
     private let maxPoll:      Int    = 15
     private let pollInterval: UInt64 = 3
@@ -499,8 +497,17 @@ struct LoggerDayView: View {
             } else if let err = errorMessage {
                 loggerErrorView(message: err, retryAction: loadAll)
             } else {
-                timelinePanel
-                    .padding(16)
+                // Landscape side-by-side: timeline left, segment grid right
+                HStack(alignment: .top, spacing: 0) {
+                    timelinePanel
+                        .frame(maxWidth: .infinity)
+                        .padding(16)
+
+                    Divider().background(Theme.panelBorder)
+
+                    segmentGridColumn
+                        .frame(width: 280)
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -529,15 +536,6 @@ struct LoggerDayView: View {
                 playerBar.padding(.horizontal, 12).padding(.bottom, 6)
             }
         }
-        // Persistent bottom sheet for the hour grid
-        .sheet(isPresented: .constant(true)) {
-            gridSheetContent
-                .presentationDetents([.height(44), .medium, .large], selection: $gridDetent)
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled()
-                .presentationBackground(Theme.panel)
-                .presentationBackgroundInteraction(.enabled(upThrough: .large))
-        }
     }
 
     // MARK: - Loading overlay
@@ -558,21 +556,52 @@ struct LoggerDayView: View {
             // Playback error banner
             if let pbErr = playbackError { errorBanner(pbErr) }
 
-            // Day overview bar
-            PanelCard(title: "TIMELINE — PINCH TO ZOOM  •  DRAG TO SCROLL  •  TAP TO PLAY") {
+            // Day bar + bands
+            PanelCard(title: "TIMELINE  •  PINCH TO ZOOM  •  DRAG  •  TAP TO PLAY") {
                 VStack(spacing: 6) {
                     dayBarCanvas
                     timeAxisLabels
-                    if !showSpans.isEmpty  { bandView(spans: showSpanRects,  height: 16, icon: "radio",     tint: Color.purple) }
-                    if !micSpans.isEmpty   { bandView(spans: micSpanRects,   height: 10, icon: "mic.fill",  tint: Theme.okGreen) }
-                    if !trackPoints.isEmpty { bandView(spans: trackSpanRects, height: 10, icon: "music.note", tint: Theme.pendingAmber) }
+                    if !showSpans.isEmpty   { bandView(spans: showSpanRects,  height: 18, icon: "radio",      tint: Color.purple) }
+                    if !micSpans.isEmpty    { bandView(spans: micSpanRects,   height: 12, icon: "mic.fill",   tint: Theme.okGreen) }
+                    if !trackPoints.isEmpty { bandView(spans: trackSpanRects, height: 12, icon: "music.note", tint: Theme.pendingAmber) }
                     zoomRow
                 }
             }
 
-            // Legend
             legendRow
         }
+    }
+
+    // MARK: - Right-column segment grid
+
+    private var segmentGridColumn: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("SEGMENTS")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.mutedText)
+                    Spacer()
+                    if isLoading {
+                        ProgressView().controlSize(.mini).tint(Theme.brandBlue)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+
+                Divider().background(Theme.panelBorder)
+
+                VStack(spacing: 0) {
+                    ForEach(0..<24, id: \.self) { hour in
+                        if hour > 0 { Divider().background(Theme.panelBorder).opacity(0.4) }
+                        hourRow(hour: hour)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 80)   // clear player bar
+            }
+        }
+        .background(Theme.panel.opacity(0.6))
     }
 
     // MARK: - Day bar Canvas (zoomable / pannable)
@@ -602,7 +631,7 @@ struct LoggerDayView: View {
                 }
             }
         }
-        .frame(height: 56)
+        .frame(height: 110)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.panelBorder.opacity(0.4), lineWidth: 1))
         .background(
@@ -793,37 +822,6 @@ struct LoggerDayView: View {
 
     // MARK: - Grid sheet
 
-    private var gridSheetContent: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Sheet title row
-                HStack {
-                    Text("SEGMENTS")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.mutedText)
-                    Spacer()
-                    if isLoading {
-                        ProgressView().controlSize(.mini).tint(Theme.brandBlue)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-
-                Divider().background(Theme.panelBorder)
-
-                // 24-hour grid
-                VStack(spacing: 0) {
-                    ForEach(0..<24, id: \.self) { hour in
-                        if hour > 0 { Divider().background(Theme.panelBorder).opacity(0.4) }
-                        hourRow(hour: hour)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 100)
-            }
-        }
-    }
-
     @ViewBuilder
     private func hourRow(hour: Int) -> some View {
         let sm      = slotMap
@@ -852,14 +850,14 @@ struct LoggerDayView: View {
                                     .stroke(Color.white.opacity(0.6), lineWidth: 1.5)
                             }
                         }
-                        .frame(height: 20)
+                        .frame(height: 16)
                     }
                     .buttonStyle(.plain)
                     .disabled(seg == nil)
                 }
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
     }
 
     // MARK: - Player bar
