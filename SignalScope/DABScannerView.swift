@@ -391,7 +391,7 @@ struct DABScannerView: View {
                 Text("DAB Scanner Not Available")
                     .font(.headline)
                     .foregroundStyle(Theme.primaryText)
-                Text("No sites with DAB dongles found. Assign a dongle the 'dab' role in Settings → SDR Devices on a client node, then wait for the next heartbeat.")
+                Text("No sites with DAB/scanner dongles found. Assign a dongle the 'scanner' role in Settings, or install the DAB plugin on the hub.")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedText)
                     .multilineTextAlignment(.center)

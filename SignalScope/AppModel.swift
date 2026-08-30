@@ -81,12 +81,7 @@ final class AppModel: ObservableObject {
     @Published var hubOverview: HubOverviewResponse?
     @Published var hubOverviewError: String?
 
-    @Published var abGroups: [ABGroup] = []
-    @Published var abGroupsError: String? = nil
-
     @Published var loadingAudioURL: URL?   // set while AVPlayer is buffering, cleared when .playing
-    @Published var loggerDayViewActive: Bool = false   // true only when LoggerDayView is on screen
-    @Published var loggerInstalled: Bool = false
 
     let api = APIClient()
     private var pollTask: Task<Void, Never>?
@@ -180,18 +175,7 @@ final class AppModel: ObservableObject {
     func refreshAll() async {
         await fetchChains()
         await refreshHubOverview()
-        await refreshABGroups()
         writeWidgetData()
-    }
-
-    func checkLoggerInstalled() async {
-        guard api.baseURL != nil, !api.token.isEmpty else { return }
-        do {
-            _ = try await api.fetchLoggerStatus()
-            loggerInstalled = true
-        } catch {
-            loggerInstalled = false
-        }
     }
 
     // MARK: - Watchlist
@@ -329,18 +313,6 @@ final class AppModel: ObservableObject {
         } catch {
             if error is CancellationError { return }
             hubOverviewError = error.localizedDescription
-        }
-    }
-
-    func refreshABGroups() async {
-        guard api.baseURL != nil else { return }
-        do {
-            let groups = try await api.fetchABGroups()
-            abGroups = groups
-            abGroupsError = nil
-        } catch {
-            if error is CancellationError { return }
-            abGroupsError = error.localizedDescription
         }
     }
 
