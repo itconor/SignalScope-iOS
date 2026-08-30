@@ -101,6 +101,28 @@ final class AppModel: ObservableObject {
         NotificationManager.shared.requestAuthorization()
         startPolling()
         observeNotificationEvents()
+        // Debug: `-autoListen` launch arg plays the first hub stream with a
+        // live URL as soon as the overview loads — lets automated tests
+        // exercise the /chunks playback path without UI taps.
+        if ProcessInfo.processInfo.arguments.contains("-autoListen") {
+            Task { [weak self] in
+                for _ in 0..<30 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard let self else { return }
+                    if let site = self.hubOverview?.sites.first(where: { s in
+                        s.streams.contains { $0.live_url != nil } }),
+                       let stream = site.streams.first(where: { $0.live_url != nil }),
+                       let path = stream.live_url,
+                       let base = self.api.baseURL,
+                       let url = URL(string: path, relativeTo: base)?.absoluteURL {
+                        self.playAudio(url: self.api.authorizedPlaybackURL(for: url),
+                                       title: stream.name, subtitle: site.site,
+                                       playlist: [], index: 0)
+                        return
+                    }
+                }
+            }
+        }
     }
 
     deinit {
@@ -375,7 +397,65 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Live listening via /chunks (4.2.27 mobile API)
+    //
+    // Live streams migrate off AVPlayer-on-/live (which pins one hub
+    // Waitress thread per listener for the whole listen) onto the
+    // short-poll /chunks endpoints built for this app. Clips keep AVPlayer.
+
+    private var chunkPlayer: ChunkStreamPlayer?
+    private var chunkStatusSub: AnyCancellable?
+    private var lastChunkURL: URL?
+
+    var isLiveChunkPlayback: Bool { chunkPlayer != nil }
+
+    /// A mobile live-relay URL (…/stream/<n>/live) — the only kind with a
+    /// /chunks twin. Clips, DAB relays and scanner relays keep AVPlayer.
+    private func chunksURL(for url: URL) -> URL? {
+        guard url.path.hasSuffix("/live"),
+              url.path.contains("/api/mobile/"),
+              url.path.contains("/stream/") else { return nil }
+        var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        comps?.path = String(url.path.dropLast("/live".count)) + "/chunks"
+        return comps?.url
+    }
+
+    /// Play one queue item through the right backend. Playlist state
+    /// (next/prev through chain nodes) is preserved either way.
+    private func startItem(_ item: AudioQueueItem) {
+        if let chunks = chunksURL(for: item.url) {
+            teardownPlayer()
+            let p = chunkPlayer ?? ChunkStreamPlayer()
+            chunkPlayer = p
+            lastChunkURL = chunks
+            currentAudioItem = item
+            isAudioPlaying = true
+            audioStatusText = "Connecting…"
+            chunkStatusSub = p.$statusText
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] text in
+                    guard let self, self.chunkPlayer != nil, !text.isEmpty else { return }
+                    self.audioStatusText = text
+                    if self.loadingAudioURL != nil, text == "Streaming" {
+                        self.loadingAudioURL = nil
+                    }
+                }
+            p.start(chunksURL: chunks, headers: api.authHeaders)
+        } else {
+            stopChunkPlayback()
+            startPlayback(item: item)
+        }
+    }
+
+    private func stopChunkPlayback() {
+        chunkStatusSub?.cancel()
+        chunkStatusSub = nil
+        chunkPlayer?.stop()
+        chunkPlayer = nil
+    }
+
     func playAudio(url: URL, title: String, subtitle: String?, playlist: [AudioQueueItem], index: Int) {
+        stopChunkPlayback()
         currentPlaybackTask?.cancel()
         isPreparingClipPlayback = false
         clipPlaybackStatusText = ""
@@ -391,10 +471,25 @@ final class AppModel: ObservableObject {
         currentAudioIndex = min(max(index, 0), effectivePlaylist.count - 1)
         let selected = effectivePlaylist[currentAudioIndex]
         currentAudioItem = selected
-        startPlayback(item: selected)
+        startItem(selected)
     }
 
     func togglePlayback() {
+        // Live chunk playback: "pause" ends the poll session entirely
+        // (holding a live buffer paused makes no sense); "play" rejoins
+        // live with a fresh session at the same stream.
+        if chunkPlayer != nil {
+            if isAudioPlaying {
+                chunkPlayer?.stop()
+                isAudioPlaying = false
+                audioStatusText = "Paused"
+            } else if let url = lastChunkURL {
+                isAudioPlaying = true
+                audioStatusText = "Connecting…"
+                chunkPlayer?.start(chunksURL: url, headers: api.authHeaders)
+            }
+            return
+        }
         guard let player else { return }
         if isAudioPlaying {
             player.pause()
@@ -412,7 +507,7 @@ final class AppModel: ObservableObject {
         currentAudioIndex = max(0, currentAudioIndex - 1)
         let item = audioPlaylist[currentAudioIndex]
         currentAudioItem = item
-        startPlayback(item: item)
+        startItem(item)
     }
 
     func playNext() {
@@ -420,10 +515,12 @@ final class AppModel: ObservableObject {
         currentAudioIndex = min(audioPlaylist.count - 1, currentAudioIndex + 1)
         let item = audioPlaylist[currentAudioIndex]
         currentAudioItem = item
-        startPlayback(item: item)
+        startItem(item)
     }
 
     func stopAudio() {
+        stopChunkPlayback()
+        lastChunkURL = nil
         currentPlaybackTask?.cancel()
         isPreparingClipPlayback = false
         clipPlaybackStatusText = ""
