@@ -667,7 +667,22 @@ private struct NodeTreeView: View {
                     }
 
                     HStack(spacing: 8) {
-                        SignalMeterView(level: node.displayLevelDbfs, label: node.signalLabel)
+                        if node.hasStereoLevels {
+                            StereoMeterView(
+                                levelL: node.level_dbfs_l,
+                                levelR: node.level_dbfs_r,
+                                fractionL: node.levelFractionL,
+                                fractionR: node.levelFractionR,
+                                silenceActive: node.isSilenceActive
+                            )
+                        } else {
+                            SignalMeterView(
+                                level: node.displayLevelDbfs,
+                                label: node.signalLabel,
+                                silenceActive: node.isSilenceActive,
+                                flatnessActive: node.isFlatnessActive
+                            )
+                        }
                         if isFaultTarget { MetricChip(icon: "exclamationmark.triangle", text: "Fault focus") }
                         if isMaintenanceTarget { MetricChip(icon: "wrench.and.screwdriver", text: "Maintenance") }
                     }
@@ -836,8 +851,11 @@ struct FlowChipRow: View {
 private struct SignalMeterView: View {
     let level: Double?
     let label: String
+    var silenceActive: Bool = false
+    var flatnessActive: Bool = false
 
     private var fillColor: Color {
+        if silenceActive { return Theme.faultRed }
         guard let level else { return Theme.mutedText }
         if level >= -12 { return Theme.pendingAmber }
         if level >= -30 { return Theme.okGreen }
@@ -857,9 +875,19 @@ private struct SignalMeterView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
                 Spacer(minLength: 0)
-                Text(label)
-                    .font(.caption2)
-                    .foregroundStyle(Theme.secondaryText)
+                if silenceActive {
+                    Text("SILENCE")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Theme.faultRed)
+                } else if flatnessActive {
+                    Text("FLAT")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Theme.pendingAmber)
+                } else {
+                    Text(label)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.secondaryText)
+                }
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -873,8 +901,91 @@ private struct SignalMeterView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel.opacity(0.5)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.panelBorder.opacity(0.45), lineWidth: 1))
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(silenceActive ? Theme.faultRed.opacity(0.08) : Theme.panel.opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(
+                    silenceActive ? Theme.faultRed.opacity(0.45) :
+                    flatnessActive ? Theme.pendingAmber.opacity(0.45) :
+                    Theme.panelBorder.opacity(0.45),
+                    lineWidth: 1
+                )
+        )
+    }
+}
+
+/// Stereo L/R bar meter for chain nodes that report per-channel levels.
+private struct StereoMeterView: View {
+    let levelL: Double?
+    let levelR: Double?
+    let fractionL: Double
+    let fractionR: Double
+    var silenceActive: Bool = false
+
+    private func barColor(_ fraction: Double) -> Color {
+        if silenceActive { return Theme.faultRed }
+        let dbfs = fraction * 60 - 60
+        if dbfs >= -12 { return Theme.pendingAmber }
+        if dbfs >= -30 { return Theme.okGreen }
+        return Theme.faultRed
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                if let l = levelL {
+                    Text("L " + l.formattedDbfs())
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.primaryText)
+                }
+                Spacer(minLength: 0)
+                if let r = levelR {
+                    Text("R " + r.formattedDbfs())
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.primaryText)
+                }
+                if silenceActive {
+                    Text("SILENCE")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Theme.faultRed)
+                }
+            }
+            VStack(spacing: 3) {
+                stereoBar(label: "L", fraction: fractionL)
+                stereoBar(label: "R", fraction: fractionR)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(silenceActive ? Theme.faultRed.opacity(0.08) : Theme.panel.opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(silenceActive ? Theme.faultRed.opacity(0.45) : Theme.panelBorder.opacity(0.45), lineWidth: 1)
+        )
+    }
+
+    private func stereoBar(label: String, fraction: Double) -> some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Theme.mutedText)
+                .frame(width: 8)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 999).fill(Theme.panel.opacity(0.95))
+                    RoundedRectangle(cornerRadius: 999)
+                        .fill(barColor(fraction))
+                        .frame(width: max(proxy.size.width * fraction, fraction > 0 ? 8 : 0))
+                }
+            }
+            .frame(height: 7)
+        }
     }
 }
 
@@ -936,6 +1047,15 @@ private extension ChainNode {
         if let loss = rtp_loss_pct, loss > 0 {
             items.append(.init(icon: "antenna.radiowaves.left.and.right",
                                text: String(format: "RTP %.1f%% loss", loss)))
+        }
+        if isSilenceActive {
+            items.append(.init(icon: "waveform.slash", text: "Silence active"))
+        }
+        if isFlatnessActive {
+            items.append(.init(icon: "waveform.badge.exclamationmark", text: "Flatness detected"))
+        }
+        if let glitch = glitch_count, glitch > 0 {
+            items.append(.init(icon: "bolt.trianglebadge.exclamationmark", text: "\(glitch) glitch\(glitch == 1 ? "" : "es")"))
         }
         return items
     }

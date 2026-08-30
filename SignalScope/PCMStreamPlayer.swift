@@ -31,6 +31,7 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
     }
 
     @Published var status: Status = .idle
+    @Published var audioLevel: Float = 0   // RMS of the most-recent PCM block (0.0 – 1.0)
     var onStatusChange: ((Status) -> Void)?
 
     // MARK: - Private
@@ -142,6 +143,7 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
             DispatchQueue.main.async(execute: stopNodes)
         }
 
+        DispatchQueue.main.async { [weak self] in self?.audioLevel = 0 }
         updateStatus(.stopped)
     }
 
@@ -198,6 +200,8 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
             guard engine.isRunning else { return }
 
             playerNode.scheduleBuffer(pcmBuf, completionHandler: nil)
+            let rms = Self.rms(of: pcmBuf)
+            DispatchQueue.main.async { [weak self] in self?.audioLevel = rms }
 
             if !alreadyPlaying && count >= preBufferBlocks {
                 playerNode.play()
@@ -206,6 +210,16 @@ final class PCMStreamPlayer: NSObject, ObservableObject {
                 updateStatus(.buffering)
             }
         }
+    }
+
+    // MARK: - RMS metering
+
+    private static func rms(of buffer: AVAudioPCMBuffer) -> Float {
+        guard let ch = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return 0 }
+        let n = Int(buffer.frameLength)
+        var sum: Float = 0
+        for i in 0..<n { sum += ch[i] * ch[i] }
+        return sqrt(sum / Float(n))
     }
 
     // MARK: - PCM conversion (Int16 LE → Float32)

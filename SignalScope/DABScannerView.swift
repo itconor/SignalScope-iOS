@@ -13,7 +13,7 @@ struct DABScannerView: View {
     @State private var isLoading = false
     @State private var isStreaming = false
     @State private var isScanning = false
-    @State private var statusText = "Idle"
+    @State private var statusText = "Ready"
     @State private var errorMessage: String?
     @State private var dlsText: String = ""
     @State private var currentService: String = ""
@@ -22,7 +22,12 @@ struct DABScannerView: View {
     @State private var statusPollTask: Task<Void, Never>?
     @State private var siteLoadTask: Task<Void, Never>?
 
-    // Region / location presets — hardcoded (Band III channels never change)
+    // Simulated EQ level for DAB (AVPlayer doesn't expose PCM level easily)
+    @State private var eqLevel: Float = 0
+    @State private var eqTimer: Timer?
+    @State private var eqPhase: Double = 0
+
+    // Region / location presets
     private static let scanPresets: [(id: String, label: String, icon: String, channels: [String])] = [
         ("all",          "Full Scan (38 ch)",           "🌍", []),
         ("uk_ni",        "Northern Ireland (6 ch)",     "🏴", ["11D","11A","12B","12D","9A","9C"]),
@@ -45,38 +50,52 @@ struct DABScannerView: View {
         ("belgium",      "Belgium (4 ch)",                "🇧🇪", ["7B","8A","10B","11D"]),
         ("switzerland",  "Switzerland (5 ch)",            "🇨🇭", ["7A","7B","7C","8A","12D"]),
     ]
-    @State private var selectedRegionID: String = "all"   // "all" = scan every channel
+    @State private var selectedRegionID: String = "all"
+
+    private var selectedPreset: (id: String, label: String, icon: String, channels: [String])? {
+        Self.scanPresets.first { $0.id == selectedRegionID }
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if sites.isEmpty && !isLoading {
-                        unavailableCard
-                    } else {
-                        sitePickerCard
-                        servicesCard
-                        playerCard
-                        if !dlsText.isEmpty || isStreaming {
-                            dlsCard
+            ZStack {
+                Theme.backgroundGradient.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 14) {
+                        if sites.isEmpty && !isLoading {
+                            unavailableCard
+                        } else {
+                            // Now-playing hero — visible only when streaming
+                            if isStreaming {
+                                nowPlayingCard
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+
+                            // Source + scan controls
+                            controlsCard
+
+                            // Station list
+                            if !services.isEmpty {
+                                stationListCard
+                            } else if !isScanning {
+                                noServicesCard
+                            }
+                        }
+
+                        if let error = errorMessage {
+                            errorBanner(error)
                         }
                     }
-
-                    if let error = errorMessage {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(Theme.faultRed)
-                            .padding(.horizontal)
-                    }
+                    .padding()
+                    .animation(.easeInOut(duration: 0.3), value: isStreaming)
                 }
-                .padding()
             }
-            .background(Theme.backgroundGradient.ignoresSafeArea())
             .navigationTitle("DAB Scanner")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if isLoading {
+                    if isLoading && sites.isEmpty {
                         ProgressView().tint(Theme.brandBlue)
                     } else {
                         Button {
@@ -90,61 +109,147 @@ struct DABScannerView: View {
                 }
             }
             .task { await loadSites() }
-            .onDisappear { stopStatusPoll() }
+            .onDisappear { stopStatusPoll(); stopEQTimer() }
         }
     }
 
-    // MARK: - Site Picker Card
+    // MARK: - Now Playing Hero Card
 
-    private var sitePickerCard: some View {
-        PanelCard(title: "Site") {
-            VStack(alignment: .leading, spacing: 10) {
+    private var nowPlayingCard: some View {
+        PanelCard {
+            VStack(spacing: 0) {
+                // Live badge + header
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(Theme.faultRed)
+                                .frame(width: 7, height: 7)
+                                .shadow(color: Theme.faultRed.opacity(0.9), radius: 4)
+                            Text("LIVE")
+                                .font(.caption2.weight(.heavy))
+                                .foregroundStyle(Theme.faultRed)
+                        }
+
+                        Text(currentService.isEmpty ? (selectedService?.label ?? "DAB Radio") : currentService)
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(Theme.primaryText)
+                            .lineLimit(1)
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.caption2)
+                                .foregroundStyle(Theme.brandBlue)
+                            Text("DAB")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Theme.brandBlue)
+                            if !currentChannel.isEmpty {
+                                Text("· Ch \(currentChannel)")
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.mutedText)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    // Stop button in header
+                    Button { Task { await stopAction() } } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(Theme.faultRed)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoading)
+                }
+                .padding(.bottom, 14)
+
+                // EQ Visualizer (simulated for DAB)
+                EqualizerBarsView(level: eqLevel, isActive: isStreaming)
+                    .padding(.bottom, 14)
+
+                // DLS "now playing" text
+                if !dlsText.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "music.note")
+                            .font(.caption)
+                            .foregroundStyle(Theme.brandBlue)
+                        Text(dlsText)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+                } else if isStreaming {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .tint(Theme.brandBlue)
+                        Text(statusText)
+                            .font(.caption)
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Theme.brandBlue.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Controls Card (site, region, scan)
+
+    private var controlsCard: some View {
+        PanelCard {
+            VStack(alignment: .leading, spacing: 12) {
+                // Site + serial pickers
                 if sites.isEmpty {
                     HStack { Spacer(); ProgressView().tint(Theme.brandBlue); Spacer() }
                 } else {
-                    Picker("Site", selection: $selectedSite) {
-                        ForEach(sites) { site in
-                            Text(site.site).tag(site.site)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(Theme.brandBlue)
-                    .onChange(of: selectedSite) { _, newSite in
-                        let site = sites.first { $0.site == newSite }
-                        selectedSerial = site?.serials.first ?? ""
-                        services = []
-                        Task { await loadServices() }
-                    }
-
-                    if let site = sites.first(where: { $0.site == selectedSite }), site.serials.count > 1 {
-                        Picker("SDR Device", selection: $selectedSerial) {
-                            ForEach(site.serials, id: \.self) { serial in
-                                Text(serial.isEmpty ? "Auto" : serial).tag(serial)
+                    HStack(spacing: 10) {
+                        Label("Site", systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                        Spacer()
+                        Picker("Site", selection: $selectedSite) {
+                            ForEach(sites) { site in
+                                Text(site.site).tag(site.site)
                             }
                         }
                         .pickerStyle(.menu)
                         .tint(Theme.brandBlue)
+                        .onChange(of: selectedSite) { _, newSite in
+                            let site = sites.first { $0.site == newSite }
+                            selectedSerial = site?.serials.first ?? ""
+                            services = []
+                            Task { await loadServices() }
+                        }
+                    }
+
+                    if let site = sites.first(where: { $0.site == selectedSite }), site.serials.count > 1 {
+                        HStack(spacing: 10) {
+                            Label("SDR", systemImage: "memorychip")
+                                .font(.caption)
+                                .foregroundStyle(Theme.secondaryText)
+                            Spacer()
+                            Picker("SDR Device", selection: $selectedSerial) {
+                                ForEach(site.serials, id: \.self) { serial in
+                                    Text(serial.isEmpty ? "Auto" : serial).tag(serial)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(Theme.brandBlue)
+                        }
                     }
                 }
-            }
-        }
-    }
 
-    // MARK: - Services Card
+                Divider().background(Theme.panelBorder)
 
-    private var selectedPreset: (id: String, label: String, icon: String, channels: [String])? {
-        Self.scanPresets.first { $0.id == selectedRegionID }
-    }
-
-    private var servicesCard: some View {
-        PanelCard(title: "Services") {
-            VStack(alignment: .leading, spacing: 12) {
-
-                // Region picker
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Scan Region")
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
+                // Region picker + scan button
+                HStack(spacing: 10) {
                     Picker("Region", selection: $selectedRegionID) {
                         ForEach(Self.scanPresets, id: \.id) { preset in
                             Text("\(preset.icon) \(preset.label)").tag(preset.id)
@@ -152,152 +257,136 @@ struct DABScannerView: View {
                     }
                     .pickerStyle(.menu)
                     .tint(Theme.brandBlue)
-                }
+                    .frame(maxWidth: .infinity)
 
-                HStack {
-                    if !scannedAt.isEmpty {
-                        Text("Scanned \(scannedAt)")
-                            .font(.caption2)
-                            .foregroundStyle(Theme.mutedText)
-                    }
-                    Spacer()
-                    Button {
-                        Task { await scanAction() }
-                    } label: {
-                        Label(isScanning ? "Scanning…" : "Scan", systemImage: "antenna.radiowaves.left.and.right")
-                            .font(.caption.weight(.semibold))
+                    Button { Task { await scanAction() } } label: {
+                        HStack(spacing: 6) {
+                            if isScanning {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                            }
+                            Text(isScanning ? "Scanning…" : "Scan")
+                                .font(.subheadline.weight(.semibold))
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.brandBlue)
                     .disabled(selectedSite.isEmpty || isScanning)
                 }
 
-                if services.isEmpty {
-                    Text("No services found. Tap Scan to discover DAB services.")
+                // Scan progress / last scanned
+                if isScanning || !statusText.isEmpty && statusText != "Ready" {
+                    Text(statusText)
                         .font(.caption)
                         .foregroundStyle(Theme.mutedText)
-                } else {
-                    ForEach(services) { service in
-                        Button {
-                            selectedService = service
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(service.label)
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(Theme.primaryText)
-                                    Text("Ch \(service.channel)")
-                                        .font(.caption2)
-                                        .foregroundStyle(Theme.mutedText)
-                                }
-                                Spacer()
-                                if selectedService?.id == service.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(Theme.brandBlue)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .buttonStyle(.plain)
-                        if service.id != services.last?.id {
-                            Divider().background(Theme.panelBorder.opacity(0.5))
-                        }
+                        .transition(.opacity)
+                }
+
+                if !scannedAt.isEmpty && !isScanning {
+                    Text("Last scan: \(scannedAt)")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedText.opacity(0.7))
+                }
+            }
+        }
+    }
+
+    // MARK: - Station List Card
+
+    private var stationListCard: some View {
+        PanelCard(title: "\(services.count) Services Found") {
+            VStack(spacing: 0) {
+                ForEach(services) { service in
+                    stationRow(service)
+                    if service.id != services.last?.id {
+                        Divider()
+                            .background(Theme.panelBorder.opacity(0.5))
                     }
                 }
             }
         }
     }
 
-    // MARK: - Player Card
+    private func stationRow(_ service: DABService) -> some View {
+        let isSelected = selectedService?.id == service.id
+        let isPlaying  = isStreaming && isSelected
 
-    private var playerCard: some View {
-        PanelCard(title: "Playback") {
-            VStack(alignment: .leading, spacing: 12) {
-                if let service = selectedService {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(service.label)
-                                .font(.headline)
-                                .foregroundStyle(Theme.primaryText)
-                            Text("Channel \(service.channel)")
-                                .font(.caption)
-                                .foregroundStyle(Theme.mutedText)
-                        }
-                        Spacer()
-                        statusDot
-                    }
-                } else {
-                    Text("Select a service above to play")
-                        .font(.subheadline)
+        return Button {
+            let wasStreaming = isStreaming
+            selectedService = service
+            if wasStreaming {
+                Task {
+                    await stopAction()
+                    await startAction()
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                // Play/active indicator
+                ZStack {
+                    Circle()
+                        .fill(isPlaying ? Theme.okGreen.opacity(0.18) : (isSelected ? Theme.brandBlue.opacity(0.13) : Color.clear))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: isPlaying ? "waveform" : (isSelected ? "checkmark.circle.fill" : "play.circle"))
+                        .font(isPlaying ? .caption.weight(.bold) : .body)
+                        .foregroundStyle(isPlaying ? Theme.okGreen : (isSelected ? Theme.brandBlue : Theme.mutedText))
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(service.label)
+                        .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                        .foregroundStyle(isSelected ? Theme.primaryText : Theme.secondaryText)
+                    Text("Ch \(service.channel)")
+                        .font(.caption2)
                         .foregroundStyle(Theme.mutedText)
                 }
 
-                HStack(spacing: 10) {
-                    if isStreaming {
-                        Button {
-                            Task { await stopAction() }
-                        } label: {
-                            Label("Stop", systemImage: "stop.circle.fill")
-                                .font(.footnote.weight(.semibold))
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.faultRed)
-                        .disabled(isLoading)
-                    } else {
-                        Button {
-                            Task { await startAction() }
-                        } label: {
-                            Label("Play", systemImage: "play.circle.fill")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.okGreen)
-                        .disabled(selectedSite.isEmpty || selectedService == nil || isLoading)
-                    }
+                Spacer()
 
-                    if isLoading {
-                        ProgressView().tint(Theme.brandBlue)
+                if !isStreaming && isSelected {
+                    Button { Task { await startAction() } } label: {
+                        Label("Play", systemImage: "play.circle.fill")
+                            .font(.subheadline.weight(.semibold))
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.okGreen)
+                    .disabled(isLoading)
                 }
-
-                Text(statusText)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondaryText)
             }
+            .padding(.vertical, 8)
         }
+        .buttonStyle(.plain)
     }
 
-    private var statusDot: some View {
-        Circle()
-            .fill(isStreaming ? Theme.okGreen : (isLoading ? Theme.pendingAmber : Theme.mutedText))
-            .frame(width: 12, height: 12)
-            .shadow(color: (isStreaming ? Theme.okGreen : Color.clear).opacity(0.6), radius: 4)
-    }
+    // MARK: - No services / unavailable
 
-    // MARK: - DLS Card
-
-    private var dlsCard: some View {
-        PanelCard(title: "Now Playing (DLS)") {
-            if dlsText.isEmpty {
-                Text("No DLS data yet…")
+    private var noServicesCard: some View {
+        PanelCard {
+            VStack(spacing: 12) {
+                Image(systemName: "radio")
+                    .font(.system(size: 36))
+                    .foregroundStyle(Theme.mutedText)
+                Text("No services found")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                Text("Tap Scan to discover DAB services in your area.")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedText)
-            } else {
-                Text(dlsText)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(3)
+                    .multilineTextAlignment(.center)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
         }
     }
-
-    // MARK: - Unavailable Card
 
     private var unavailableCard: some View {
         PanelCard {
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                    .font(.system(size: 40))
+                    .font(.system(size: 44))
                     .foregroundStyle(Theme.mutedText)
                 Text("DAB Scanner Not Available")
                     .font(.headline)
@@ -308,11 +397,43 @@ struct DABScannerView: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
+            .padding(.vertical, 24)
         }
     }
 
-    // MARK: - Actions
+    private func errorBanner(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(Theme.faultRed)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(Theme.faultRed)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - EQ simulation (DAB uses AVPlayer — no raw PCM level available)
+
+    private func startEQTimer() {
+        stopEQTimer()
+        eqPhase = 0
+        eqTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
+            guard isStreaming else { return }
+            eqPhase += 0.12
+            // Combine two slow sine waves + small random jitter → natural-looking movement
+            let base = Float(0.30 + 0.22 * sin(eqPhase * 2.1) + 0.14 * sin(eqPhase * 4.9))
+            eqLevel = max(0.05, base + Float.random(in: -0.04...0.04))
+        }
+    }
+
+    private func stopEQTimer() {
+        eqTimer?.invalidate()
+        eqTimer = nil
+        eqLevel = 0
+    }
+
+    // MARK: - Actions (logic unchanged)
 
     private func loadSites() async {
         guard appModel.api.baseURL != nil else {
@@ -343,9 +464,7 @@ struct DABScannerView: View {
             if let first = services.first, selectedService == nil {
                 selectedService = first
             }
-        } catch {
-            // Non-fatal
-        }
+        } catch { }
     }
 
     private func scanAction() async {
@@ -353,17 +472,15 @@ struct DABScannerView: View {
         isScanning = true
         defer { isScanning = false }
         do {
-            // Pass selected preset's channels (nil = all channels = full scan)
             let channels: [String]? = selectedRegionID == "all" ? nil : selectedPreset?.channels
             let chDesc = channels.map { "\($0.count) ch" } ?? "full scan"
             try await appModel.api.scanDAB(site: selectedSite, sdrSerial: selectedSerial, channels: channels)
             statusText = "Scan started (\(chDesc)) — polling for progress…"
 
-            // Poll scan_status until done
-            let deadline = Date().addingTimeInterval(20 * 60)  // 20 minute timeout
+            let deadline = Date().addingTimeInterval(20 * 60)
             var pollCount = 0
             while Date() < deadline {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)  // poll every 5 s
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
                 if let status = try? await appModel.api.fetchDABScanStatus(site: selectedSite) {
                     pollCount += 1
                     let pct = status.total.flatMap { t in
@@ -373,9 +490,7 @@ struct DABScannerView: View {
                     statusText = status.status == "done"
                         ? "Scan complete — \(status.found ?? 0) service(s) found"
                         : "Scanning\(ch)… \(pct)%"
-                    if status.status == "done" || (status.status == "idle" && pollCount > 2) {
-                        break
-                    }
+                    if status.status == "done" || (status.status == "idle" && pollCount > 2) { break }
                 }
             }
             await loadServices()
@@ -410,6 +525,7 @@ struct DABScannerView: View {
                 index: 0
             )
             startStatusPoll()
+            startEQTimer()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -417,15 +533,14 @@ struct DABScannerView: View {
 
     private func stopAction() async {
         stopStatusPoll()
+        stopEQTimer()
         appModel.stopAudio()
         isStreaming = false
-        statusText = "Stopped"
+        statusText = "Ready"
         dlsText = ""
         do {
             try await appModel.api.stopDAB(site: selectedSite)
-        } catch {
-            // Non-fatal
-        }
+        } catch { }
     }
 
     // MARK: - Status polling
@@ -440,18 +555,15 @@ struct DABScannerView: View {
                         dlsText = status.dls ?? ""
                         currentService = status.service ?? ""
                         currentChannel = status.channel ?? ""
-                        if status.streaming == true {
-                            statusText = "Streaming \(currentService) — Ch \(currentChannel)"
-                        } else {
-                            statusText = "Buffering…"
-                        }
+                        statusText = status.streaming == true
+                            ? "Streaming \(currentService)"
+                            : "Buffering…"
                     } else {
                         isStreaming = false
+                        stopEQTimer()
                         statusText = "Session ended"
                     }
-                } catch {
-                    // Ignore poll errors
-                }
+                } catch { }
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
@@ -462,12 +574,9 @@ struct DABScannerView: View {
         statusPollTask = nil
     }
 
-    // MARK: - Helpers
-
     private func resolveStreamURL(_ path: String) -> URL {
         if let base = appModel.api.baseURL {
-            return URL(string: path, relativeTo: base)?.absoluteURL
-                ?? base.appendingPathComponent(path)
+            return URL(string: path, relativeTo: base)?.absoluteURL ?? base.appendingPathComponent(path)
         }
         return URL(string: path) ?? URL(string: "about:blank")!
     }

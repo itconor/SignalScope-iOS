@@ -408,6 +408,19 @@ private struct StreamRow: View {
                                     .fill(Theme.brandBlue.opacity(0.12))
                             )
                     }
+                    // FM Stereo indicator
+                    if stream.fm_stereo == true {
+                        let blendLabel = stream.stereoBlendLabel ?? "Stereo"
+                        Text(blendLabel)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Theme.okGreen)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Theme.okGreen.opacity(0.12))
+                            )
+                    }
                     if let sla = stream.sla_pct {
                         Text(String(format: "SLA %.1f%%", sla))
                             .font(.caption2)
@@ -418,16 +431,40 @@ private struct StreamRow: View {
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(stream.rtpLossColor)
                     }
-                    // RTP Jitter (Feature 3)
                     if let jitterLabel = stream.rtpJitterLabel {
                         Text(jitterLabel)
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(stream.rtpJitterColor)
                     }
-                    if let glitchLabel = stream.glitchLabel {
-                        Text(glitchLabel)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Color.orange)
+                    // LUFS reading
+                    if let lufs = stream.lufsLabel {
+                        Text(lufs)
+                            .font(.caption2)
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                    // Silence active badge
+                    if stream.silence_active == true {
+                        Text("SILENCE")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Theme.faultRed)
+                            )
+                    }
+                    // Flatness warning badge
+                    if stream.flatness_active == true {
+                        Text("FLAT")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Theme.pendingAmber)
+                            )
                     }
                 }
             }
@@ -455,17 +492,27 @@ private struct StreamRow: View {
 
     private var levelBar: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.white.opacity(0.07))
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(stream.levelColor)
-                        .frame(width: geo.size.width * stream.levelFraction)
+            if stream.hasStereoLevels {
+                // L/R stereo bars
+                VStack(spacing: 2) {
+                    lrBar(fraction: stream.levelFractionL, label: "L")
+                    lrBar(fraction: stream.levelFractionR, label: "R")
                 }
+                .frame(width: 72)
+            } else {
+                // Mono bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.white.opacity(0.07))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(stream.silence_active == true ? Theme.faultRed : stream.levelColor)
+                            .frame(width: geo.size.width * stream.levelFraction)
+                    }
+                }
+                .frame(width: 72, height: 5)
+                .clipShape(RoundedRectangle(cornerRadius: 2))
             }
-            .frame(width: 72, height: 5)
-            .clipShape(RoundedRectangle(cornerRadius: 2))
 
             if let level = stream.level_dbfs {
                 Text(String(format: "%.1f dB", level))
@@ -476,6 +523,26 @@ private struct StreamRow: View {
                     .font(.system(size: 9))
                     .foregroundStyle(Theme.mutedText)
             }
+        }
+    }
+
+    private func lrBar(fraction: Double, label: String) -> some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Theme.mutedText)
+                .frame(width: 7)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.white.opacity(0.07))
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(stream.silence_active == true ? Theme.faultRed : stream.levelColor)
+                        .frame(width: geo.size.width * fraction)
+                }
+            }
+            .frame(height: 4)
+            .clipShape(RoundedRectangle(cornerRadius: 1.5))
         }
     }
 }

@@ -183,6 +183,23 @@ final class APIClient: ObservableObject {
         }
     }
 
+    func updateWatchedNodes(_ nodes: [String], deviceToken: String) async throws {
+        guard !deviceToken.isEmpty else { return }
+        var req = try makeRequest(path: "/api/mobile/device_token")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "token": deviceToken,
+            "action": "update_nodes",
+            "watched_nodes": nodes,
+            "sandbox": false
+        ])
+        let (_, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+    }
+
     func unregisterDeviceToken(_ token: String) async throws {
         var req = try makeRequest(path: "/api/mobile/device_token")
         req.httpMethod = "POST"
@@ -413,6 +430,33 @@ final class APIClient: ObservableObject {
         let req = try makeRequest(path: "/api/mobile/dab/scan_status/\(site)")
         let (data, _) = try await URLSession.shared.data(for: req)
         return try JSONDecoder().decode(DABScanStatus.self, from: data)
+    }
+
+    // MARK: - Zetta
+
+    func fetchZettaStatus() async throws -> ZettaStatusResponse {
+        var req = try makeRequest(path: "/api/mobile/zetta/status")
+        req.httpMethod = "GET"
+        let (data, response) = try await URLSession.shared.data(for: req)
+        if let http = response as? HTTPURLResponse {
+            if http.statusCode == 404 {
+                throw ZettaError.pluginNotInstalled
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+        }
+        return try JSONDecoder().decode(ZettaStatusResponse.self, from: data)
+    }
+
+    enum ZettaError: LocalizedError {
+        case pluginNotInstalled
+        var errorDescription: String? {
+            switch self {
+            case .pluginNotInstalled:
+                return "Zetta plugin not found on this node. Make sure your hub URL is set correctly in Settings, then install or update the Zetta plugin to v2.1.27+ via Settings → Plugins on your hub."
+            }
+        }
     }
 
     // MARK: - Chain Maintenance

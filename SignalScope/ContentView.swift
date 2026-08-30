@@ -1,66 +1,11 @@
 import SwiftUI
-import UIKit
-
-// MARK: - Sidebar-adaptable tab style (iPad / iOS 18+)
-// On iPadOS 18+ the new tab bar design can silently drop tabs from the
-// "More" overflow when using the legacy .tabItem{} API with many tabs.
-// .sidebarAdaptable shows ALL tabs in a collapsible sidebar on iPad and
-// falls back to the standard bottom bar on iPhone / iOS 17.
-private extension View {
-    @ViewBuilder
-    func adaptiveTabStyle() -> some View {
-        if #available(iOS 18.0, *) {
-            self.tabViewStyle(.sidebarAdaptable)
-        } else {
-            self
-        }
-    }
-}
 
 struct ContentView: View {
     @EnvironmentObject private var appModel: AppModel
 
-    // MARK: - Orientation management
-    // Logger tab (7) locks to landscape only when LoggerDayView is pushed.
-    // All other situations → portrait.  We explicitly request portrait on unlock
-    // so the app snaps back immediately rather than waiting for a physical tilt.
-
-    /// Called once on cold launch to snap back to portrait regardless of what
-    /// orientation the previous session left the window in.
-    private func forcePortrait() {
-        AppDelegate.orientationLock = .all
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            scene.requestGeometryUpdate(
-                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-            ) { _ in }
-        }
-    }
-
-    private func applyOrientation() {
-        let wantLandscape = appModel.lastSelectedTab == 7 && appModel.loggerDayViewActive
-        if wantLandscape {
-            guard AppDelegate.orientationLock != .landscape else { return }
-            AppDelegate.orientationLock = .landscape
-            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                scene.requestGeometryUpdate(
-                    UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)
-                ) { _ in }
-            }
-        } else {
-            guard AppDelegate.orientationLock != .all else { return }
-            AppDelegate.orientationLock = .all
-            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                // Explicitly request portrait to snap back — .all alone only *permits*
-                // portrait but doesn't rotate; the user would otherwise have to tilt.
-                scene.requestGeometryUpdate(
-                    UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-                ) { _ in }
-            }
-        }
-    }
-
     var body: some View {
         TabView(selection: $appModel.lastSelectedTab) {
+            // ── Always-visible top 5 ──────────────────────────────────────
             HubOverviewView()
                 .tabItem {
                     Image(systemName: "server.rack")
@@ -83,58 +28,45 @@ struct ContentView: View {
                 }
                 .tag(2)
 
-            ABGroupsView()
+            ZettaView()
                 .tabItem {
-                    Label("A/B Groups", systemImage: "arrow.left.arrow.right.circle")
+                    Image(systemName: "music.quarternote.3")
+                    Text("Zetta")
                 }
                 .tag(3)
-
-            ReportsView()
-                .tabItem {
-                    Image(systemName: "doc.text.magnifyingglass")
-                    Text("Reports")
-                }
-                .tag(4)
-
-            FMScannerView()
-                .tabItem {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                    Text("FM")
-                }
-                .tag(5)
-
-            DABScannerView()
-                .tabItem {
-                    Image(systemName: "radio")
-                    Text("DAB")
-                }
-                .tag(6)
-
-            LoggerView()
-                .tabItem {
-                    Image(systemName: "waveform.and.mic")
-                    Text("Logger")
-                }
-                .tag(7)
 
             SettingsView()
                 .tabItem {
                     Image(systemName: "gearshape")
                     Text("Settings")
                 }
-                .tag(8)
+                .tag(4)
+
+            // ── Under "More" ──────────────────────────────────────────────
+            ReportsView()
+                .tabItem {
+                    Image(systemName: "doc.text.magnifyingglass")
+                    Text("Reports")
+                }
+                .tag(5)
+
+            FMScannerView()
+                .tabItem {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                    Text("FM")
+                }
+                .tag(6)
+
+            DABScannerView()
+                .tabItem {
+                    Image(systemName: "radio")
+                    Text("DAB")
+                }
+                .tag(7)
         }
-        .adaptiveTabStyle()
         .tint(Theme.brandBlue)
         .preferredColorScheme(.dark)
         .background(Theme.backgroundGradient.ignoresSafeArea())
-        // Force portrait on cold launch — onChange never fires at startup so a previous
-        // landscape session would leave the app stuck sideways without this.
-        .onAppear { forcePortrait() }
-        // Tab switch → always re-evaluate orientation (ensures unlock when leaving Logger)
-        .onChange(of: appModel.lastSelectedTab)    { applyOrientation() }
-        // LoggerDayView pushed/popped → lock or unlock within the Logger tab
-        .onChange(of: appModel.loggerDayViewActive) { applyOrientation() }
         .overlay(alignment: .top) {
             if appModel.hasActiveFaults {
                 faultBanner

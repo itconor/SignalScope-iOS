@@ -14,41 +14,53 @@ struct SignalHistoryView: View {
 
     enum MetricOption: String, CaseIterable, Identifiable {
         case level      = "level_dbfs"
+        case level_l    = "level_dbfs_l"
+        case level_r    = "level_dbfs_r"
         case lufs_m     = "lufs_m"
+        case lufs_s     = "lufs_s"
         case lufs_i     = "lufs_i"
         case rtp_loss   = "rtp_loss_pct"
         case rtp_jitter = "rtp_jitter_ms"
         case fm_signal  = "fm_signal_dbm"
         case fm_snr     = "fm_snr_db"
+        case fm_stereo_blend = "fm_stereo_blend"
         case dab_snr    = "dab_snr"
 
         var id: String { rawValue }
 
         var displayName: String {
             switch self {
-            case .level:      return "Level (dBFS)"
-            case .lufs_m:     return "LUFS Momentary"
-            case .lufs_i:     return "LUFS Integrated"
-            case .rtp_loss:   return "RTP Loss %"
-            case .rtp_jitter: return "RTP Jitter (ms)"
-            case .fm_signal:  return "FM Signal (dBm)"
-            case .fm_snr:     return "FM SNR (dB)"
-            case .dab_snr:    return "DAB SNR"
+            case .level:            return "Level (dBFS)"
+            case .level_l:          return "Level L (dBFS)"
+            case .level_r:          return "Level R (dBFS)"
+            case .lufs_m:           return "LUFS Momentary"
+            case .lufs_s:           return "LUFS Short-term"
+            case .lufs_i:           return "LUFS Integrated"
+            case .rtp_loss:         return "RTP Loss %"
+            case .rtp_jitter:       return "RTP Jitter (ms)"
+            case .fm_signal:        return "FM Signal (dBm)"
+            case .fm_snr:           return "FM SNR (dB)"
+            case .fm_stereo_blend:  return "FM Stereo Blend"
+            case .dab_snr:          return "DAB SNR"
             }
         }
 
         var unit: String {
             switch self {
-            case .rtp_loss:   return "%"
-            case .rtp_jitter: return "ms"
-            default:          return "dB"
+            case .rtp_loss:         return "%"
+            case .rtp_jitter:       return "ms"
+            case .fm_stereo_blend:  return ""
+            default:                return "dB"
             }
         }
 
         var lineColor: Color {
             switch self {
-            case .rtp_loss, .rtp_jitter: return Theme.pendingAmber
-            default:                     return Theme.brandBlue
+            case .rtp_loss, .rtp_jitter:    return Theme.pendingAmber
+            case .level_l:                  return Theme.brandBlue
+            case .level_r:                  return Theme.okGreen
+            case .fm_stereo_blend:          return Theme.okGreen
+            default:                        return Theme.brandBlue
             }
         }
     }

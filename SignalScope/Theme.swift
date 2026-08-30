@@ -49,6 +49,77 @@ extension Color {
     }
 }
 
+// MARK: - Equalizer Bars Visualizer
+
+struct EqualizerBarsView: View {
+    /// RMS audio level 0–1. Drive from real PCM data or a simulated timer value.
+    var level: Float
+    /// Whether playback is active. Bars collapse when false.
+    var isActive: Bool
+
+    private let barCount = 20
+
+    // Per-bar random multipliers seeded once — give each bar its own personality
+    @State private var multipliers: [Double] = []
+    @State private var heights: [Double] = Array(repeating: 2, count: 20)
+
+    var body: some View {
+        GeometryReader { geo in
+            let gap: CGFloat = 2.5
+            let barW = (geo.size.width - gap * CGFloat(barCount - 1)) / CGFloat(barCount)
+            HStack(alignment: .bottom, spacing: gap) {
+                ForEach(0..<barCount, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(eqGradient)
+                        .frame(width: max(1, barW),
+                               height: max(2, heights.indices.contains(i) ? heights[i] : 2))
+                        .animation(.spring(response: 0.13, dampingFraction: 0.52), value: heights[i])
+                }
+            }
+        }
+        .frame(height: 48)
+        .onAppear {
+            guard multipliers.isEmpty else { return }
+            // Bell-curve shape — mids higher than bass/treble, then randomised
+            multipliers = (0..<barCount).map { i in
+                let pos = Double(i) / Double(barCount - 1)   // 0…1
+                let curve = 1.0 - pow(abs(pos - 0.45) * 1.8, 2.0)
+                return max(0.15, curve) * Double.random(in: 0.55...1.45)
+            }
+        }
+        .onChange(of: level) { _, lvl in
+            guard isActive, !multipliers.isEmpty else { return }
+            // RMS of typical speech/music is ~0.03–0.25; scale to fill the bars
+            let scaled = min(1.0, Double(lvl) * 5.5)
+            heights = multipliers.map { m in
+                let h = scaled * m * 46.0 + Double.random(in: -2...2)
+                return max(2, min(48, h))
+            }
+        }
+        .onChange(of: isActive) { _, active in
+            if !active {
+                withAnimation(.easeOut(duration: 0.7)) {
+                    heights = Array(repeating: 2, count: barCount)
+                }
+            }
+        }
+    }
+
+    private var eqGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Theme.brandBlue.opacity(0.75),
+                Theme.brandBlue,
+                Color(red: 0.12, green: 0.92, blue: 0.72)
+            ],
+            startPoint: .bottom,
+            endPoint: .top
+        )
+    }
+}
+
+// MARK: - Panel Card
+
 struct PanelCard<Content: View>: View {
     let title: String?
     let content: Content

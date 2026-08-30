@@ -315,7 +315,18 @@ struct ReportsView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(counts.keys.sorted(), id: \.self) { key in
-                                MetricChip(icon: "chart.bar.doc.horizontal", text: "\(key) \(counts[key] ?? 0)")
+                                // Use the same color logic as the event badge for consistency
+                                let badgeColor = ReportEvent.badgeColor(for: key)
+                                HStack(spacing: 4) {
+                                    Text(key.replacingOccurrences(of: "_", with: " "))
+                                        .font(.caption2.weight(.semibold))
+                                    Text("\(counts[key] ?? 0)")
+                                        .font(.caption2.weight(.bold))
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(badgeColor.opacity(0.75)))
                             }
                         }
                     }
@@ -383,22 +394,12 @@ private struct ReportEventCard: View {
                             .foregroundStyle(Theme.secondaryText)
                     }
                     Spacer()
-                    HStack(spacing: 4) {
-                        if event.type == "GLITCH" || event.type == "AUDIO_GLITCH_SUSTAINED" {
-                            Image(systemName: "bolt.fill")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.black)
-                        }
-                        Text(event.type.replacingOccurrences(of: "_", with: " "))
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.black)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(
-                        (event.type == "GLITCH" || event.type == "AUDIO_GLITCH_SUSTAINED") ? Color.orange :
-                        event.clip ? Theme.pendingAmber : Theme.brandBlue
-                    ))
+                    Text(event.type.replacingOccurrences(of: "_", with: " "))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(event.eventBadgeTextColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(event.eventBadgeColor))
                 }
 
                 if !event.chain.isEmpty {

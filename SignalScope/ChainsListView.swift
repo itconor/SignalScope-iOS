@@ -77,19 +77,22 @@ struct ChainsListView: View {
             ZStack {
                 Theme.backgroundGradient.ignoresSafeArea()
 
-                if filteredChains.isEmpty, !appModel.isLoading {
-                    emptyState
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12, pinnedViews: []) {
-                            headerSummary
-                            controlPanel
+                ScrollView {
+                    LazyVStack(spacing: 12, pinnedViews: []) {
+                        headerSummary
+                        controlPanel
 
-                            if let error = appModel.errorMessage {
-                                errorBanner(error)
-                            }
+                        if let error = appModel.errorMessage {
+                            errorBanner(error)
+                        }
 
-                            // Pinned / watchlist section (Feature 9)
+                        if filteredChains.isEmpty, !appModel.isLoading {
+                            // Empty state inline — control panel stays visible so filters can be cleared
+                            emptyState
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 24)
+                        } else {
+                            // Pinned / watchlist section
                             if !watchedChains.isEmpty {
                                 sectionHeader("Pinned", count: watchedChains.count)
                                 ForEach(watchedChains) { chain in
@@ -112,11 +115,11 @@ struct ChainsListView: View {
                                 }
                             }
                         }
-                        .padding()
                     }
-                    .refreshable {
-                        await appModel.fetchChains()
-                    }
+                    .padding()
+                }
+                .refreshable {
+                    await appModel.fetchChains()
                 }
             }
             .navigationTitle("Chains")

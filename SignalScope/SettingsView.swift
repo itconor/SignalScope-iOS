@@ -113,40 +113,48 @@ private struct SilenceNodePickerView: View {
 
     var body: some View {
         List {
-            if appModel.allNodeLabels.isEmpty {
+            if appModel.nodesByChain.isEmpty {
                 Text("No nodes available — refresh chains first.")
                     .foregroundStyle(.secondary)
             } else {
-                Section {
-                    ForEach(appModel.allNodeLabels, id: \.self) { label in
-                        let isOn = appModel.silenceWatchedNodes.contains(label)
-                        Button {
-                            appModel.toggleSilenceNode(label)
-                        } label: {
-                            HStack {
-                                Image(systemName: isOn ? "bell.fill" : "bell")
-                                    .foregroundStyle(isOn ? Theme.brandBlue : Theme.mutedText)
-                                    .frame(width: 20)
-                                Text(label)
-                                    .foregroundStyle(Theme.primaryText)
-                                Spacer()
-                                if isOn {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Theme.brandBlue)
-                                        .font(.caption.weight(.semibold))
+                ForEach(appModel.nodesByChain, id: \.chainName) { group in
+                    Section {
+                        ForEach(group.nodes, id: \.self) { label in
+                            let isOn = appModel.silenceWatchedNodes.contains(label)
+                            Button {
+                                appModel.toggleSilenceNode(label)
+                            } label: {
+                                HStack {
+                                    Image(systemName: isOn ? "bell.fill" : "bell")
+                                        .foregroundStyle(isOn ? Theme.brandBlue : Theme.mutedText)
+                                        .frame(width: 20)
+                                    Text(label)
+                                        .foregroundStyle(Theme.primaryText)
+                                    Spacer()
+                                    if isOn {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Theme.brandBlue)
+                                            .font(.caption.weight(.semibold))
+                                    }
                                 }
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    } header: {
+                        Text(group.chainName)
                     }
-                } header: {
-                    Text("Alert when level drops below –45 dBFS")
+                }
+
+                Section {
+                    Text("Tap a node to subscribe. You'll get a push notification when that node's level drops below –45 dBFS, even when the app is closed.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .scrollContentBackground(.hidden)
         .background(Theme.backgroundGradient)
-        .navigationTitle("Silence Monitoring")
+        .navigationTitle("Watched Nodes")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

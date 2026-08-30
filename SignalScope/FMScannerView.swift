@@ -11,7 +11,7 @@ struct FMScannerView: View {
 
     @State private var isLoading = false
     @State private var isStreaming = false
-    @State private var statusText = "Idle"
+    @State private var statusText = "Ready"
     @State private var errorMessage: String?
 
     @State private var rdsPS: String = ""
@@ -21,7 +21,6 @@ struct FMScannerView: View {
     @State private var statusPollTask: Task<Void, Never>?
     @State private var siteLoadTask: Task<Void, Never>?
 
-    // Custom PCM player — AVPlayer cannot handle raw PCM streams
     @StateObject private var pcmPlayer = PCMStreamPlayer()
 
     private var parsedFreq: Double? {
@@ -31,31 +30,31 @@ struct FMScannerView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if sites.isEmpty && !isLoading {
-                        unavailableCard
-                    } else {
-                        sitePickerCard
-                        tunerCard
-                        rdsCard
-                    }
+            ZStack {
+                Theme.backgroundGradient.ignoresSafeArea()
 
-                    if let error = errorMessage {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(Theme.faultRed)
-                            .padding(.horizontal)
+                ScrollView {
+                    VStack(spacing: 14) {
+                        if sites.isEmpty && !isLoading {
+                            unavailableCard
+                        } else {
+                            playerCard
+                            if !sites.isEmpty {
+                                siteCard
+                            }
+                        }
+                        if let error = errorMessage {
+                            errorBanner(error)
+                        }
                     }
+                    .padding()
                 }
-                .padding()
             }
-            .background(Theme.backgroundGradient.ignoresSafeArea())
             .navigationTitle("FM Scanner")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if isLoading {
+                    if isLoading && sites.isEmpty {
                         ProgressView().tint(Theme.brandBlue)
                     } else {
                         Button {
@@ -75,95 +74,157 @@ struct FMScannerView: View {
             }
             .onReceive(pcmPlayer.$status) { s in
                 statusText = s.label
-                if s == .playing { isStreaming = true }
+                if s == .playing  { isStreaming = true }
                 if s == .stopped || s == .idle { isStreaming = false }
             }
         }
     }
 
-    // MARK: - Site Picker Card
+    // MARK: - Player Card
 
-    private var sitePickerCard: some View {
-        PanelCard(title: "Site") {
-            VStack(alignment: .leading, spacing: 10) {
-                if sites.isEmpty {
-                    HStack { Spacer(); ProgressView().tint(Theme.brandBlue); Spacer() }
-                } else {
-                    Picker("Site", selection: $selectedSite) {
-                        ForEach(sites) { site in
-                            Text(site.site).tag(site.site)
+    private var playerCard: some View {
+        PanelCard {
+            VStack(spacing: 0) {
+
+                // ── Station / frequency header ───────────────────────────────
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        if isStreaming && !rdsPS.isEmpty {
+                            Text(rdsPS)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(Theme.primaryText)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                         }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(Theme.brandBlue)
-                    .onChange(of: selectedSite) { _, newSite in
-                        let site = sites.first { $0.site == newSite }
-                        selectedSerial = site?.serials.first ?? ""
-                    }
 
-                    if let site = sites.first(where: { $0.site == selectedSite }), site.serials.count > 1 {
-                        Picker("SDR Device", selection: $selectedSerial) {
-                            ForEach(site.serials, id: \.self) { serial in
-                                Text(serial.isEmpty ? "Auto" : serial).tag(serial)
+                        HStack(spacing: 8) {
+                            Text(String(format: "%.1f MHz", parsedFreq ?? freqMHz))
+                                .font(.system(size: isStreaming && !rdsPS.isEmpty ? 18 : 28,
+                                              weight: .bold, design: .monospaced))
+                                .foregroundStyle(isStreaming ? Theme.brandBlue : Theme.primaryText)
+                                .contentTransition(.numericText())
+
+                            if isStreaming && rdsStereo {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "dot.radiowaves.left.and.right")
+                                        .font(.caption2.weight(.semibold))
+                                    Text("STEREO")
+                                        .font(.caption2.weight(.bold))
+                                }
+                                .foregroundStyle(Theme.okGreen)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(Theme.okGreen.opacity(0.15)))
+                                .overlay(Capsule().stroke(Theme.okGreen.opacity(0.4), lineWidth: 1))
                             }
                         }
-                        .pickerStyle(.menu)
-                        .tint(Theme.brandBlue)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Tuner Card
-
-    private var tunerCard: some View {
-        PanelCard(title: "Tuner") {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Frequency (MHz)")
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryText)
-                        TextField("96.5", text: $freqText)
-                            .keyboardType(.decimalPad)
-                            .font(.system(.title2, design: .monospaced).weight(.bold))
-                            .foregroundStyle(parsedFreq != nil ? Theme.brandBlue : Theme.faultRed)
-                            .frame(maxWidth: 120)
                     }
 
                     Spacer()
 
-                    statusDot
+                    // Live badge
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if isStreaming {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Theme.faultRed)
+                                    .frame(width: 7, height: 7)
+                                    .shadow(color: Theme.faultRed.opacity(0.9), radius: 4)
+                                Text("LIVE")
+                                    .font(.caption2.weight(.heavy))
+                                    .foregroundStyle(Theme.faultRed)
+                            }
+                            .transition(.opacity)
+                        }
+                        statusIndicator
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: isStreaming)
+                .padding(.bottom, 14)
+
+                // ── EQ Visualizer ────────────────────────────────────────────
+                EqualizerBarsView(level: pcmPlayer.audioLevel, isActive: isStreaming)
+                    .padding(.bottom, 14)
+
+                // ── RadioText (RT) ────────────────────────────────────────────
+                if isStreaming && !rdsRT.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "music.note")
+                            .font(.caption)
+                            .foregroundStyle(Theme.brandBlue)
+                        Text(rdsRT)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 14)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(.easeInOut(duration: 0.3), value: rdsRT)
                 }
 
+                Divider()
+                    .background(Theme.panelBorder)
+                    .padding(.bottom, 14)
+
+                // ── Frequency input with nudge buttons ───────────────────────
+                HStack(spacing: 10) {
+                    Button { nudgeFreq(-0.1) } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(Theme.brandBlue.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+
+                    TextField("96.5", text: $freqText)
+                        .keyboardType(.decimalPad)
+                        .font(.system(.title2, design: .monospaced).weight(.bold))
+                        .foregroundStyle(parsedFreq != nil ? Theme.primaryText : Theme.faultRed)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Theme.panelSecondary.opacity(0.55))
+                        )
+                        .frame(maxWidth: .infinity)
+
+                    Button { nudgeFreq(0.1) } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(Theme.brandBlue.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.bottom, 14)
+
+                // ── Transport buttons ────────────────────────────────────────
                 HStack(spacing: 10) {
                     if isStreaming {
-                        Button {
-                            Task { await tuneAction() }
-                        } label: {
-                            Label("Tune", systemImage: "arrow.triangle.2.circlepath")
-                                .font(.footnote.weight(.semibold))
+                        Button { Task { await tuneAction() } } label: {
+                            Label("Retune", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.brandBlue)
                         .disabled(parsedFreq == nil || isLoading)
 
-                        Button {
-                            Task { await stopAction() }
-                        } label: {
+                        Button { Task { await stopAction() } } label: {
                             Label("Stop", systemImage: "stop.circle.fill")
-                                .font(.footnote.weight(.semibold))
+                                .font(.subheadline.weight(.semibold))
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.faultRed)
                         .disabled(isLoading)
                     } else {
-                        Button {
-                            Task { await startAction() }
-                        } label: {
-                            Label("Play", systemImage: "play.circle.fill")
-                                .font(.subheadline.weight(.semibold))
+                        Button { Task { await startAction() } } label: {
+                            HStack {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.title3)
+                                Text("Play")
+                                    .font(.title3.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.okGreen)
@@ -175,65 +236,62 @@ struct FMScannerView: View {
                     }
                 }
 
-                Text(statusText)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondaryText)
-            }
-        }
-    }
-
-    private var statusDot: some View {
-        Circle()
-            .fill(isStreaming ? Theme.okGreen : (isLoading ? Theme.pendingAmber : Theme.mutedText))
-            .frame(width: 12, height: 12)
-            .shadow(color: (isStreaming ? Theme.okGreen : (isLoading ? Theme.pendingAmber : Color.clear)).opacity(0.6), radius: 4)
-    }
-
-    // MARK: - RDS Card
-
-    private var rdsCard: some View {
-        PanelCard(title: "RDS") {
-            VStack(alignment: .leading, spacing: 10) {
-                if rdsPS.isEmpty && rdsRT.isEmpty && !isStreaming {
-                    Text("Start streaming to see RDS data")
+                // ── Status line ──────────────────────────────────────────────
+                if statusText != "Ready" && !statusText.isEmpty {
+                    Text(statusText)
                         .font(.caption)
                         .foregroundStyle(Theme.mutedText)
-                } else {
-                    HStack(spacing: 8) {
-                        if rdsStereo {
-                            Label("Stereo", systemImage: "speaker.2.fill")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Theme.okGreen)
-                        }
-                        if !rdsPS.isEmpty {
-                            Text(rdsPS)
-                                .font(.system(.headline, design: .monospaced).weight(.bold))
-                                .foregroundStyle(Theme.brandBlue)
-                        }
-                    }
-                    if !rdsRT.isEmpty {
-                        Text(rdsRT)
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(2)
-                    }
-                    if rdsPS.isEmpty && rdsRT.isEmpty && isStreaming {
-                        Text("Waiting for RDS data…")
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedText)
-                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
                 }
             }
         }
     }
 
-    // MARK: - Unavailable Card
+    private var statusIndicator: some View {
+        Circle()
+            .fill(isStreaming ? Theme.okGreen : (isLoading ? Theme.pendingAmber : Theme.mutedText.opacity(0.4)))
+            .frame(width: 10, height: 10)
+            .shadow(color: isStreaming ? Theme.okGreen.opacity(0.8) : .clear, radius: 6)
+    }
+
+    // MARK: - Site Card
+
+    private var siteCard: some View {
+        PanelCard(title: "SDR Source") {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Site", selection: $selectedSite) {
+                    ForEach(sites) { site in
+                        Text(site.site).tag(site.site)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Theme.brandBlue)
+                .onChange(of: selectedSite) { _, newSite in
+                    let site = sites.first { $0.site == newSite }
+                    selectedSerial = site?.serials.first ?? ""
+                }
+
+                if let site = sites.first(where: { $0.site == selectedSite }), site.serials.count > 1 {
+                    Picker("SDR Device", selection: $selectedSerial) {
+                        ForEach(site.serials, id: \.self) { serial in
+                            Text(serial.isEmpty ? "Auto" : serial).tag(serial)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(Theme.brandBlue)
+                }
+            }
+        }
+    }
+
+    // MARK: - Unavailable
 
     private var unavailableCard: some View {
         PanelCard {
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                    .font(.system(size: 40))
+                    .font(.system(size: 44))
                     .foregroundStyle(Theme.mutedText)
                 Text("FM Scanner Not Available")
                     .font(.headline)
@@ -244,11 +302,32 @@ struct FMScannerView: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
+            .padding(.vertical, 24)
         }
     }
 
-    // MARK: - Actions
+    private func errorBanner(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(Theme.faultRed)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(Theme.faultRed)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - Frequency nudge
+
+    private func nudgeFreq(_ delta: Double) {
+        let current = Double(freqText.replacingOccurrences(of: ",", with: ".")) ?? freqMHz
+        let stepped = (current * 10 + delta * 10).rounded() / 10
+        let clamped = max(87.5, min(108.0, stepped))
+        freqText = String(format: "%.1f", clamped)
+    }
+
+    // MARK: - Actions (unchanged)
 
     private func loadSites() async {
         guard appModel.api.baseURL != nil else {
@@ -281,8 +360,6 @@ struct FMScannerView: View {
                 return
             }
             errorMessage = nil
-            // Use the raw PCM endpoint — PCMStreamPlayer handles decoding directly
-            // (AVPlayer cannot play raw PCM streams)
             let pcmURL = appModel.api.authorizedPlaybackURL(
                 for: resolveStreamURL("/api/mobile/hub/scanner/stream/\(slotID)")
             )
@@ -319,11 +396,10 @@ struct FMScannerView: View {
         pcmPlayer.stop()
         isStreaming = false
         rdsPS = ""; rdsRT = ""; rdsStereo = false
+        statusText = "Ready"
         do {
             try await appModel.api.stopScanner(site: selectedSite)
-        } catch {
-            // Non-fatal — local state already cleaned up
-        }
+        } catch { }
     }
 
     // MARK: - Status polling
@@ -347,9 +423,7 @@ struct FMScannerView: View {
                         isStreaming = false
                         statusText = "Session ended"
                     }
-                } catch {
-                    // Ignore poll errors — keep trying
-                }
+                } catch { }
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
@@ -360,12 +434,9 @@ struct FMScannerView: View {
         statusPollTask = nil
     }
 
-    // MARK: - Helpers
-
     private func resolveStreamURL(_ path: String) -> URL {
         if let base = appModel.api.baseURL {
-            return URL(string: path, relativeTo: base)?.absoluteURL
-                ?? base.appendingPathComponent(path)
+            return URL(string: path, relativeTo: base)?.absoluteURL ?? base.appendingPathComponent(path)
         }
         return URL(string: path) ?? URL(string: "about:blank")!
     }

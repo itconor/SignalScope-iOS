@@ -76,11 +76,22 @@ struct HubStream: Codable, Identifiable, Hashable {
     let name: String
     let format: String
     let level_dbfs: Double?
+    let peak_dbfs: Double?          = nil  // Peak hold level (dBFS)
+    let level_dbfs_l: Double?       = nil  // Left channel level (dBFS)
+    let level_dbfs_r: Double?       = nil  // Right channel level (dBFS)
     let sla_pct: Double?
     let ai_status: String    // "alert" | "warn" | "learning" | "ok"
     let ai_phase: String
     let rtp_loss_pct: Double?
     let rtp_jitter_ms: Double?
+    // Stereo / audio quality — all have defaults so older API responses and literal inits compile cleanly
+    let stereo: Bool?               = nil  // Stereo config flag
+    let fm_stereo: Bool?            = nil  // FM pilot tone detected (runtime)
+    let fm_stereo_blend: Double?    = nil  // FM stereo blend 0.0–1.0
+    let lufs_m: Double?             = nil  // LUFS momentary
+    let lufs_s: Double?             = nil  // LUFS short-term
+    let silence_active: Bool?       = nil  // Silence detection active
+    let flatness_active: Bool?      = nil  // Flatness detection active
     // RDS metadata (FM streams)
     let fm_rds_ps: String?   // Programme Service name, e.g. "COOL FM  "
     let fm_rds_rt: String?   // RadioText / now-playing
@@ -91,14 +102,7 @@ struct HubStream: Codable, Identifiable, Hashable {
     // Live stream URL for quick-listen
     let live_url: String?
 
-    let glitch_count: Int?
-
     var id: String { name }
-
-    var glitchLabel: String? {
-        guard let count = glitch_count, count > 0 else { return nil }
-        return "⚡ \(count) glitch\(count == 1 ? "" : "es")"
-    }
 
     /// Non-nil when there is meaningful RTP packet loss (> 0).
     var rtpLossLabel: String? {
@@ -149,11 +153,45 @@ struct HubStream: Codable, Identifiable, Hashable {
         return max(0, min(1, (level + 60) / 60))
     }
 
+    var levelFractionL: Double {
+        guard let level = level_dbfs_l else { return levelFraction }
+        return max(0, min(1, (level + 60) / 60))
+    }
+
+    var levelFractionR: Double {
+        guard let level = level_dbfs_r else { return levelFraction }
+        return max(0, min(1, (level + 60) / 60))
+    }
+
     var levelColor: Color {
         guard let level = level_dbfs else { return Theme.mutedText }
         if level >= -12 { return Theme.pendingAmber }
         if level >= -36 { return Theme.okGreen }
         return Theme.faultRed
+    }
+
+    /// True when the stream has active L/R stereo data.
+    var hasStereoLevels: Bool {
+        level_dbfs_l != nil || level_dbfs_r != nil
+    }
+
+    /// True when the stream is actually producing stereo (runtime pilot or config flag).
+    var isActivelyStereo: Bool {
+        fm_stereo == true || (stereo == true && hasStereoLevels)
+    }
+
+    /// Short label for FM stereo blend, e.g. "Stereo 95%".
+    var stereoBlendLabel: String? {
+        guard fm_stereo == true, let blend = fm_stereo_blend, blend > 0 else { return nil }
+        return String(format: "Stereo %.0f%%", blend * 100)
+    }
+
+    /// Non-nil LUFS label when a meaningful value is present.
+    var lufsLabel: String? {
+        if let m = lufs_m, m > -99 {
+            return String(format: "%.1f LUFS", m)
+        }
+        return nil
     }
 
     var aiStatusColor: Color {
@@ -384,10 +422,14 @@ struct ChainNode: Codable, Identifiable, Hashable {
     let machine: String?
     let live_url: String?
     let level_dbfs: Double?
+    let level_dbfs_l: Double?       = nil  // Left channel level (dBFS)
+    let level_dbfs_r: Double?       = nil  // Right channel level (dBFS)
     let ts: TimeInterval?
     let mode: String?
     let rtp_loss_pct: Double?
-    let glitch_count: Int?
+    let silence_active: Bool?       = nil  // Silence detection active on this node
+    let flatness_active: Bool?      = nil  // Flatness detection active on this node
+    let glitch_count: Int?          = nil  // Recent glitch count
     let nodes: [ChainNode]?
 
     var id: String {
@@ -443,6 +485,25 @@ struct ChainNode: Codable, Identifiable, Hashable {
         return childLevels.max()
     }
 
+    var hasStereoLevels: Bool {
+        level_dbfs_l != nil || level_dbfs_r != nil
+    }
+
+    var levelFractionL: Double {
+        guard let level = level_dbfs_l else { return signalFraction ?? 0 }
+        let clamped = min(max(level, -60), 0)
+        return (clamped + 60) / 60
+    }
+
+    var levelFractionR: Double {
+        guard let level = level_dbfs_r else { return signalFraction ?? 0 }
+        let clamped = min(max(level, -60), 0)
+        return (clamped + 60) / 60
+    }
+
+    var isSilenceActive: Bool { silence_active == true }
+    var isFlatnessActive: Bool { flatness_active == true }
+
     var signalLabel: String {
         guard let level = displayLevelDbfs else { return childNodes.isEmpty ? "No level" : "Child level" }
         if level >= -12 { return "Hot" }
@@ -465,11 +526,6 @@ struct ChainNode: Codable, Identifiable, Hashable {
         let age = Date().timeIntervalSince1970 - freshestTimestamp
         guard age > 30 else { return nil }
         return "Telemetry age \(age.formattedSeconds())"
-    }
-
-    var glitchLabel: String? {
-        guard let count = glitch_count, count > 0 else { return nil }
-        return "⚡ \(count)"
     }
 
     var signalFraction: Double? {
@@ -568,6 +624,47 @@ struct ReportEvent: Codable, Hashable, Identifiable {
     var clipResolvedURL: URL? {
         guard let clip_url else { return nil }
         return URL(string: clip_url)
+    }
+
+    /// Static colour lookup so the Reports summary card can reuse the same mapping.
+    static func badgeColor(for type: String) -> Color {
+        switch type {
+        case "SILENCE", "STUDIO_FAULT", "STL_FAULT", "TX_DOWN", "DAB_AUDIO_FAULT",
+             "RTP_FAULT", "CHAIN_FAULT", "CODEC_FAULT", "DEAD_CHANNEL",
+             "PHASE_REVERSAL", "AZURACAST_FAULT":
+            return Theme.faultRed
+        case "FLATNESS", "LUFS_TP_EXCEEDED", "OVERMOD", "OVER_COMPRESSION",
+             "STEREO_IMBALANCE", "MONO_ON_STEREO", "MAINS_HUM", "DC_OFFSET",
+             "LEVEL_DRIFT", "HF_LOSS", "TONE_DETECT", "GLITCH", "COMPARATOR_DRIFT":
+            return Theme.pendingAmber
+        case "AI_ANOMALY", "COMPARATOR":
+            return Color(hex: "A855F7")
+        case "CHAIN_RECOVERY", "SILENCE_RECOVERY", "CODEC_RECOVERY", "AZURACAST_RECOVERY":
+            return Theme.okGreen
+        default:
+            return Theme.brandBlue
+        }
+    }
+
+    /// Background colour for the event type badge.
+    var eventBadgeColor: Color {
+        let base = ReportEvent.badgeColor(for: type)
+        // If it would fall back to blue and this event has a clip, use amber instead
+        if base == Theme.brandBlue && clip { return Theme.pendingAmber }
+        return base
+    }
+
+    /// Text colour for the badge (dark on light backgrounds, white on dark).
+    var eventBadgeTextColor: Color {
+        switch type {
+        case "SILENCE", "STUDIO_FAULT", "STL_FAULT", "TX_DOWN", "DAB_AUDIO_FAULT",
+             "RTP_FAULT", "CHAIN_FAULT", "CODEC_FAULT", "DEAD_CHANNEL", "PHASE_REVERSAL",
+             "AZURACAST_FAULT", "CHAIN_RECOVERY", "SILENCE_RECOVERY", "CODEC_RECOVERY",
+             "AZURACAST_RECOVERY":
+            return .white
+        default:
+            return .black
+        }
     }
 }
 
@@ -782,47 +879,6 @@ struct MetricHistoryResponse: Codable {
     let points: [MetricPoint]
 }
 
-// MARK: - A/B Groups
-
-struct ABGroup: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let active_role: String   // "a" or "b"
-    let notes: String
-    let chain_a_id: String
-    let chain_a_name: String
-    let chain_b_id: String
-    let chain_b_name: String
-    let status: String        // "ok" | "warn" | "fault" | "unknown"
-    let a_ok: Bool
-    let b_ok: Bool
-    let rx_ok: Bool
-    let since: Double
-
-    var statusColor: Color {
-        switch status {
-        case "fault":   return Theme.faultRed
-        case "warn":    return Theme.pendingAmber
-        case "ok":      return Theme.okGreen
-        default:        return Theme.mutedText
-        }
-    }
-
-    var activeName: String {
-        active_role == "b" ? chain_b_name : chain_a_name
-    }
-
-    var standbyName: String {
-        active_role == "b" ? chain_a_name : chain_b_name
-    }
-}
-
-struct ABGroupsResponse: Codable {
-    let ok: Bool
-    let results: [ABGroup]
-    let count: Int
-}
-
 // MARK: - Hub navigation
 
 /// Pairs a HubStream with its parent site name for use as a NavigationLink value.
@@ -975,6 +1031,88 @@ struct MaintenanceResponse: Codable {
     let error: String?
 }
 
+// MARK: - Zetta Sequencer Models
+
+/// A single now-playing or queued item from a Zetta sequencer.
+/// CRITICAL: Always check `assetType == 2` (not `isSpot`) to detect ad breaks.
+struct ZettaTrack: Codable, Hashable {
+    let title: String
+    let artist: String
+    let assetType: Int           // 2 = spot/commercial
+    let durationSeconds: Int
+
+    var isAdBreak: Bool { assetType == 2 }
+
+    enum CodingKeys: String, CodingKey {
+        case title, artist
+        case assetType       = "asset_type"
+        case durationSeconds = "duration_seconds"
+    }
+}
+
+struct ZettaStation: Codable, Identifiable, Hashable {
+    let stationId: String
+    let stationName: String
+    let modeName: String
+    let statusName: String
+    let gap: String
+    let etm: String
+    let remainingSeconds: Double
+    let durationSeconds: Double
+    let computerName: String?
+    let isSpot: Bool
+    let nowPlaying: ZettaTrack?
+    let queue: [ZettaTrack]
+    let error: String?
+
+    var id: String { stationId }
+
+    /// True when the sequencer is currently playing a spot/commercial block.
+    /// Checks asset_type == 2 per project rule — never uses the precomputed is_spot.
+    var isAdBreakActive: Bool {
+        nowPlaying?.isAdBreak == true
+    }
+
+    /// Progress fraction 0–1 for the current item.
+    var progressFraction: Double {
+        guard durationSeconds > 0 else { return 0 }
+        return min(1, max(0, (durationSeconds - remainingSeconds) / durationSeconds))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case stationId       = "station_id"
+        case stationName     = "station_name"
+        case modeName        = "mode_name"
+        case statusName      = "status_name"
+        case gap, etm
+        case remainingSeconds = "remaining_seconds"
+        case durationSeconds  = "duration_seconds"
+        case computerName    = "computer_name"
+        case isSpot          = "is_spot"
+        case nowPlaying      = "now_playing"
+        case queue, error
+    }
+}
+
+struct ZettaInstance: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let connected: Bool
+    let lastError: String?
+    let stations: [ZettaStation]
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, connected
+        case lastError = "last_error"
+        case stations
+    }
+}
+
+struct ZettaStatusResponse: Codable {
+    let instances: [ZettaInstance]
+    let ts: Double
+}
+
 extension Array where Element == ChainNode {
     /// Recursively flattens all nodes and their children into a single array.
     func flattenedAll() -> [ChainNode] {
@@ -1003,135 +1141,4 @@ extension Double {
     func formattedDbfs() -> String {
         String(format: "%.1f dBFS", self)
     }
-}
-
-// MARK: - Logger
-
-struct LoggerStream: Identifiable, Codable, Hashable {
-    let name: String
-    let slug: String
-    var id: String { slug }
-}
-
-struct LoggerSegment: Identifiable {
-    let filename: String
-    let start_s: Double
-    let hasSilence: Bool
-    let silence_pct: Double?
-    var id: String { filename }
-
-    var startLabel: String {
-        let totalSeconds = Int(start_s)
-        let h = totalSeconds / 3600
-        let m = (totalSeconds % 3600) / 60
-        return String(format: "%02d:%02d", h, m)
-    }
-
-    var durationLabel: String { "5 min" }
-}
-
-extension LoggerSegment: Codable {
-    enum CodingKeys: String, CodingKey {
-        case filename, start_s, has_silence, silence_pct
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        filename    = try c.decode(String.self, forKey: .filename)
-        // start_s is REAL in SQLite but filesystem-fallback rows may emit a JSON integer
-        if let d = try? c.decode(Double.self, forKey: .start_s) {
-            start_s = d
-        } else if let i = try? c.decode(Int.self, forKey: .start_s) {
-            start_s = Double(i)
-        } else {
-            start_s = 0
-        }
-        silence_pct = try c.decodeIfPresent(Double.self, forKey: .silence_pct)
-        // Python SQLite stores has_silence as 0/1 integer; handle both int and bool
-        if let b = try? c.decodeIfPresent(Bool.self, forKey: .has_silence) {
-            hasSilence = b ?? false
-        } else if let i = try? c.decodeIfPresent(Int.self, forKey: .has_silence) {
-            hasSilence = (i ?? 0) != 0
-        } else {
-            hasSilence = false
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(filename,    forKey: .filename)
-        try c.encode(start_s,     forKey: .start_s)
-        try c.encode(hasSilence,  forKey: .has_silence)
-        try c.encodeIfPresent(silence_pct, forKey: .silence_pct)
-    }
-}
-
-struct LoggerMetaEvent: Identifiable, Codable {
-    let ts_s: Double
-    let type: String
-    let title: String?
-    let artist: String?
-    let show_name: String?
-    let presenter: String?
-    var id: String { "\(ts_s)-\(type)-\(title ?? "")" }
-
-    var isShow: Bool { type == "show" }
-    var isTrack: Bool { type == "track" }
-    var isMicOn: Bool  { type == "mic_on" }
-    var isMicOff: Bool { type == "mic_off" }
-
-    var primaryLabel: String {
-        if isTrack { return (title ?? "").isEmpty ? "Unknown Track" : title! }
-        if isShow  { return (show_name ?? "").isEmpty ? "Show" : show_name! }
-        if isMicOn  { return "Mic On" }
-        if isMicOff { return "Mic Off" }
-        return (title ?? "").isEmpty ? type : title!
-    }
-
-    var secondaryLabel: String? {
-        if isTrack, let a = artist, !a.isEmpty { return a }
-        if isShow,  let p = presenter, !p.isEmpty { return p }
-        return nil
-    }
-
-    var timeLabel: String {
-        let totalSeconds = Int(ts_s)
-        let h = totalSeconds / 3600
-        let m = (totalSeconds % 3600) / 60
-        return String(format: "%02d:%02d", h, m)
-    }
-}
-
-struct LoggerStatusResponse: Codable {
-    let installed: Bool
-}
-
-struct LoggerSitesResponse: Codable {
-    let sites: [String]
-}
-
-struct LoggerStreamsResponse: Codable {
-    let streams: [LoggerStream]
-}
-
-struct LoggerDaysResponse: Codable {
-    let days: [String]
-    let pending: Bool?
-}
-
-struct LoggerSegmentsResponse: Codable {
-    let segments: [LoggerSegment]
-    let pending: Bool?
-}
-
-struct LoggerMetadataResponse: Codable {
-    let events: [LoggerMetaEvent]
-    let pending: Bool?
-}
-
-struct LoggerPlayResponse: Codable {
-    let ok: Bool?
-    let slot_id: String?
-    let stream_url: String?
-    let error: String?
 }

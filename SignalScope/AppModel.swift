@@ -578,6 +578,15 @@ final class AppModel: ObservableObject {
             silenceWatchedNodes.insert(label)
         }
         persistSilenceNodes()
+        syncWatchedNodesToServer()
+    }
+
+    func syncWatchedNodesToServer() {
+        let nodes = Array(silenceWatchedNodes)
+        let token = storedAPNSToken
+        Task {
+            try? await api.updateWatchedNodes(nodes, deviceToken: token)
+        }
     }
 
     private func checkSilenceAlerts() {
@@ -586,7 +595,10 @@ final class AppModel: ObservableObject {
         for chain in chains {
             for node in chain.nodes.flattenedAll() {
                 guard silenceWatchedNodes.contains(node.label) else { continue }
-                guard let level = node.level_dbfs, level < silenceThresholdDbfs else { continue }
+                // Prefer the server-side silence_active flag; fall back to level threshold.
+                let isSilent = node.isSilenceActive
+                    || (node.level_dbfs.map { $0 < silenceThresholdDbfs } ?? false)
+                guard isSilent else { continue }
                 let key = "\(chain.id)/\(node.label)"
                 if let last = silenceAlertCooldown[key], now.timeIntervalSince(last) < silenceCooldown { continue }
                 silenceAlertCooldown[key] = now
@@ -616,6 +628,18 @@ final class AppModel: ObservableObject {
     /// All unique node labels across all chains — used by the silence node picker.
     var allNodeLabels: [String] {
         Array(Set(chains.flatMap { $0.nodes.flattenedAll().map(\.label) })).sorted()
+    }
+
+    /// Nodes grouped by chain name — used by the chain-grouped silence node picker.
+    var nodesByChain: [(chainName: String, nodes: [String])] {
+        chains.compactMap { chain in
+            let labels = chain.nodes.flattenedAll().map(\.label)
+            guard !labels.isEmpty else { return nil }
+            // Deduplicate while preserving order
+            var seen = Set<String>()
+            let unique = labels.filter { seen.insert($0).inserted }
+            return (chainName: chain.name, nodes: unique)
+        }
     }
 
     private func captureRecentFault(_ chain: ChainSummary) {
@@ -673,6 +697,8 @@ final class AppModel: ObservableObject {
         do {
             try await api.registerDeviceToken(token)
             storedAPNSToken = token
+            // Sync watched nodes so the server knows which nodes this device cares about
+            try? await api.updateWatchedNodes(Array(silenceWatchedNodes), deviceToken: token)
         } catch {
             print("[APNs] Token upload failed: \(error)")
         }

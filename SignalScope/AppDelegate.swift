@@ -2,17 +2,6 @@ import UIKit
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
 
-    // MARK: - Orientation lock
-    // Set this before calling requestGeometryUpdate so the system honours the request.
-    static var orientationLock: UIInterfaceOrientationMask = .all
-
-    func application(
-        _ application: UIApplication,
-        supportedInterfaceOrientationsFor window: UIWindow?
-    ) -> UIInterfaceOrientationMask {
-        AppDelegate.orientationLock
-    }
-
     func application(
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
